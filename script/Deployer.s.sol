@@ -7,7 +7,7 @@ import "../src/SecurityPolicy.sol";
 
 contract DeployerScript is Script {
 	function run() public {
-		string memory deployerPrivateKeyStr = vm.envString("DEPLOYER_PRIVATE_KEY");
+		string memory deployerPrivateKeyStr = vm.envString("DEPLOY_KEY");
 		uint256 deployer = vm.parseUint(deployerPrivateKeyStr);
 		vm.startBroadcast(deployer);
 

@@ -1,3 +1,3 @@
 .PHONY: deploy
 deploy:
-	forge script --rpc-url $(DEPLOY_RPC_URL) --broadcast ./script/Deployer.s.sol
+	forge script --rpc-url deploy --broadcast ./script/Deployer.s.sol
