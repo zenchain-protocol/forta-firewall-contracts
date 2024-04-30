@@ -2,10 +2,13 @@
 pragma solidity ^0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
-import {SecurityValidator} from "../src/SecurityValidator.sol";
+import "../src/SecurityValidator.sol";
+import "../src/SecurityPolicy.sol";
 
-bytes32 constant TEST_CHECKPOINT_1 = keccak256("1");
-bytes32 constant TEST_CHECKPOINT_2 = keccak256("2");
+bytes32 constant CHECKPOINT_ID_1 = keccak256("id1");
+bytes32 constant CHECKPOINT_HASH_1 = keccak256("hash1");
+bytes32 constant CHECKPOINT_ID_2 = keccak256("id2");
+bytes32 constant CHECKPOINT_HASH_2 = keccak256("hash2");
 
 contract SecurityValidatorTest is Test {
 	uint256 attesterPrivateKey;
@@ -14,6 +17,7 @@ contract SecurityValidatorTest is Test {
 	address caller2;
 
 	SecurityValidator validator;
+	SecurityPolicy policy;
 
 	bytes32 attestationHash;
 	bytes attestationSignature;
@@ -25,8 +29,14 @@ contract SecurityValidatorTest is Test {
 		caller2 = vm.addr(uint256(keccak256("caller2")));
 
 		validator = new SecurityValidator(attester, false);
-		bytes32 approvalHash1 = validator.approvalHashOf(TEST_CHECKPOINT_1, caller1, bytes32(0));
-		bytes32 approvalHash2 = validator.approvalHashOf(TEST_CHECKPOINT_2, caller2, approvalHash1);
+		policy = new SecurityPolicy(validator);
+
+		bytes32 policyCheckpoint1 = policy.policyCheckpointHashOf(CHECKPOINT_ID_1, CHECKPOINT_HASH_1, caller1);
+		bytes32 policyCheckpoint2 = policy.policyCheckpointHashOf(CHECKPOINT_ID_2, CHECKPOINT_HASH_2, caller2);
+
+		bytes32 approvalHash1 = validator.approvalHashOf(policyCheckpoint1, address(policy), bytes32(0));
+		bytes32 approvalHash2 = validator.approvalHashOf(policyCheckpoint2, address(policy), approvalHash1);
+
 		attestationHash = approvalHash2;
 		(uint8 v, bytes32 r, bytes32 s) = vm.sign(attesterPrivateKey, attestationHash);
 		attestationSignature = abi.encodePacked(r, s, v);
@@ -37,13 +47,13 @@ contract SecurityValidatorTest is Test {
 		validator.saveAttestation(attestationHash, attestationSignature);
 
 		vm.prank(caller1);
-		validator.executeCheckpoint(TEST_CHECKPOINT_1);
+		policy.executeCheckpoint(CHECKPOINT_ID_1, CHECKPOINT_HASH_1, 0);
 
 		vm.expectRevert();
 		validator.validateAttestation();
 
 		vm.prank(caller2);
-		validator.executeCheckpoint(TEST_CHECKPOINT_2);
+		policy.executeCheckpoint(CHECKPOINT_ID_2, CHECKPOINT_HASH_2, 0);
 
 		validator.validateAttestation();
 	}
