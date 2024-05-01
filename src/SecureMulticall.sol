@@ -12,10 +12,12 @@ abstract contract SecureMulticall is Multicall {
         trustedValidator = _trustedValidator;
     }
 
-    function secureMulticall(bytes32 attestationHash, bytes calldata attestationSignature, bytes[] calldata data)
-        public
-    {
-        trustedValidator.saveAttestation(attestationHash, attestationSignature);
+    function secureMulticall(
+        SecurityValidator.Attestation calldata attestation,
+        bytes calldata attestationSignature,
+        bytes[] calldata data
+    ) public {
+        trustedValidator.saveAttestation(attestation, attestationSignature);
         this.multicall(data);
         trustedValidator.validateAttestation();
     }

@@ -19,7 +19,7 @@ contract SecurityValidatorTest is Test {
     SecurityValidator validator;
     SecurityPolicy policy;
 
-    bytes32 attestationHash;
+    SecurityValidator.Attestation attestation;
     bytes attestationSignature;
 
     function setUp() public {
@@ -37,14 +37,18 @@ contract SecurityValidatorTest is Test {
         bytes32 approvalHash1 = validator.approvalHashOf(policyCheckpoint1, address(policy), bytes32(0));
         bytes32 approvalHash2 = validator.approvalHashOf(policyCheckpoint2, address(policy), approvalHash1);
 
-        attestationHash = approvalHash2;
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(attesterPrivateKey, attestationHash);
+        attestation.attester = attester;
+        attestation.timestamp = block.timestamp;
+        attestation.attestationHash = approvalHash2;
+
+        bytes32 hashOfAttestation = validator.hashAttestation(attestation);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(attesterPrivateKey, hashOfAttestation);
         attestationSignature = abi.encodePacked(r, s, v);
     }
 
     function test_attestation() public {
         vm.prank(attester);
-        validator.saveAttestation(attestationHash, attestationSignature);
+        validator.saveAttestation(attestation, attestationSignature);
 
         vm.prank(caller1);
         policy.executeCheckpoint(CHECKPOINT_ID_1, CHECKPOINT_HASH_1, 0);
