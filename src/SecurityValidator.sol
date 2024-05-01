@@ -13,6 +13,7 @@ address constant BYPASS_FLAG = 0x0000000000000000000000000000000000f01274; // "f
 uint256 constant ATTESTATION_TIMEOUT = 300; // 5m
 
 contract SecurityValidator is EIP712 {
+    error AttestationValidatorMismatch();
     error AttestationTimedOut();
     error AttestationRequired();
     error CallbackSizeMismatch();
@@ -22,12 +23,13 @@ contract SecurityValidator is EIP712 {
         address attester;
         uint256 timestamp;
         bytes32 attestationHash;
+        address validator;
         bytes[] callbacks;
         address[] callbackRecipients;
     }
 
     bytes32 private constant _ATTESTATION_TYPEHASH = keccak256(
-        "Attestation(address attester,uint256 timestamp,bytes32 attestationHash,bytes[] callbacks,address[] callbackRecipients)"
+        "Attestation(address attester,uint256 timestamp,bytes32 attestationHash,address validator,bytes[] callbacks,address[] callbackRecipients)"
     );
 
     // TODO: This should be access-controlled.
@@ -42,6 +44,9 @@ contract SecurityValidator is EIP712 {
 
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
         if (isDisabled()) return;
+        if (attestation.validator != address(this)) {
+            revert AttestationValidatorMismatch();
+        }
         if (block.timestamp > attestation.timestamp && block.timestamp - attestation.timestamp > ATTESTATION_TIMEOUT) {
             revert AttestationTimedOut();
         }

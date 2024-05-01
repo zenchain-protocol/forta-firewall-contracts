@@ -40,6 +40,7 @@ contract SecurityValidatorTest is Test {
         attestation.attester = attester;
         attestation.timestamp = block.timestamp;
         attestation.attestationHash = approvalHash2;
+        attestation.validator = address(validator);
 
         bytes32 hashOfAttestation = validator.hashAttestation(attestation);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(attesterPrivateKey, hashOfAttestation);
