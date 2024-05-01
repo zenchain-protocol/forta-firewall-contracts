@@ -1,4 +1,4 @@
-## Forta Attestation Contracts
+## Forta Security Contracts
 
 ## Deployment
 
