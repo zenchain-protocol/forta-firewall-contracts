@@ -2,7 +2,7 @@
 
 ## Deployment
 
-Create a `.env` file like
+Create an `.env` file like
 
 ```
 DEPLOY_RPC=https://polygon-mainnet.g.alchemy.com/v2/...
