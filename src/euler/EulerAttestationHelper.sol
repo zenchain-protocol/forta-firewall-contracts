@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.25;
 
+import "evc/interfaces/IEthereumVaultConnector.sol";
 import {ISecurityValidator} from "../SecurityValidator.sol";
-
-interface IEVC {
-    function requireVaultStatusCheck() external;
-}
 
 // This is not a vault but allows us to schedule a final hook by using
 // the attestation calls.
 contract EulerAttestationHelper {
-    function scheduleVaultStatusCheck(IEVC evc) public {
+    function scheduleAttestationValidation(IEVC evc) public {
         address validator = msg.sender;
         assembly {
             tstore(0, validator)

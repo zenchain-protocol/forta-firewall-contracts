@@ -27,12 +27,7 @@ interface ISecurityValidator {
     function hashAttestation(Attestation calldata attestation) external view returns (bytes32);
     function getAttester() external view returns (address);
 
-    function saveAttestation(
-        Attestation calldata attestation,
-        bytes calldata attestationSignature,
-        address sender,
-        bytes calldata callData
-    ) external;
+    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
 
     function executeCheckpoint(bytes32 checkpointHash) external;
 
@@ -55,12 +50,7 @@ contract SecurityValidator is EIP712 {
 
     constructor() EIP712("SecurityValidator", "1") {}
 
-    function saveAttestation(
-        Attestation calldata attestation,
-        bytes calldata attestationSignature,
-        address sender,
-        bytes calldata callData
-    ) public {
+    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
         if (attestation.validator != address(this)) {
             revert AttestationValidatorMismatch();
         }
@@ -71,7 +61,7 @@ contract SecurityValidator is EIP712 {
             revert CallbackSizeMismatch();
         }
 
-        bytes32 entryHash = keccak256(abi.encode(tx.origin, msg.sender, sender, callData));
+        bytes32 entryHash = keccak256(abi.encode(tx.origin, msg.sender));
         if (attestation.entryHash != entryHash) {
             revert EntryHashMismatch();
         }
@@ -102,7 +92,7 @@ contract SecurityValidator is EIP712 {
         }
     }
 
-    function getAttester() public view returns (address) {
+    function getCurrentAttester() public view returns (address) {
         address attester;
         assembly {
             attester := tload(ATTESTER_SLOT)

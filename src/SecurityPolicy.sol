@@ -3,9 +3,12 @@ pragma solidity ^0.8.25;
 
 import "./SecurityValidator.sol";
 
+interface ISecurityPolicy {
+    function executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount) external;
+}
+
 contract SecurityPolicy {
     error UntrustedAttester();
-    error CheckpointThresholdExceeded();
 
     mapping(bytes32 => uint256) thresholds;
 
@@ -19,8 +22,14 @@ contract SecurityPolicy {
         trustedAttester = _trustedAttester;
     }
 
+    // TODO: Implement access control.
+    function adjustCheckpointThreshold(bytes32 checkpointId, uint256 newThreshold) public {
+        thresholds[checkpointId] = newThreshold;
+    }
+
     function executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount) public {
-        if (trustedValidator.getAttester() != trustedAttester) {
+        // TODO: Check current attester against multiple attesters.
+        if (trustedValidator.getCurrentAttester() != trustedAttester) {
             revert UntrustedAttester();
         }
 
@@ -32,13 +41,12 @@ contract SecurityPolicy {
         }
         acc += referenceAmount;
         if (acc > threshold) {
-            revert CheckpointThresholdExceeded();
+            trustedValidator.executeCheckpoint(checkpointHash);
+            return;
         }
         assembly {
             tstore(checkpointHash, acc) // accumulate for the next time
         }
-
-        trustedValidator.executeCheckpoint(checkpointHash);
     }
 
     function checkpointHashOf(bytes32 checkpointId, address caller) public pure returns (bytes32) {

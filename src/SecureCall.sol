@@ -15,7 +15,7 @@ abstract contract SecureCall {
     function secureCall(Attestation calldata attestation, bytes calldata attestationSignature, bytes calldata data)
         public
     {
-        trustedValidator.saveAttestation(attestation, attestationSignature, msg.sender, data);
+        trustedValidator.saveAttestation(attestation, attestationSignature);
         Address.functionDelegateCall(address(this), data);
         trustedValidator.validateAttestation();
     }
