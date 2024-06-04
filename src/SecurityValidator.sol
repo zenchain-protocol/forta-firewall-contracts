@@ -5,69 +5,109 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
-uint256 constant ATTESTATION_HASH_SLOT = 0;
-uint256 constant APPROVAL_HASH_SLOT = 1;
+uint256 constant ATTESTER_SLOT = 0;
+uint256 constant ENTRY_HASH_SLOT = 1;
+uint256 constant EXIT_HASH_SLOT = 2;
+uint256 constant EXECUTION_HASH_SLOT = 3;
 
 address constant BYPASS_FLAG = 0x0000000000000000000000000000000000f01274; // "forta" in leetspeak
 
-uint256 constant ATTESTATION_TIMEOUT = 300; // 5m
+struct Attestation {
+    address attester;
+    uint256 timestamp;
+    uint256 timeout;
+    bytes32 entryHash;
+    bytes32 exitHash;
+    address validator;
+    bytes[] calls;
+    address[] recipients;
+}
+
+interface ISecurityValidator {
+    function hashAttestation(Attestation calldata attestation) external view returns (bytes32);
+    function getAttester() external view returns (address);
+
+    function saveAttestation(
+        Attestation calldata attestation,
+        bytes calldata attestationSignature,
+        address sender,
+        bytes calldata callData
+    ) external;
+
+    function executeCheckpoint(bytes32 checkpointHash) external;
+
+    function validateAttestation() external;
+}
 
 contract SecurityValidator is EIP712 {
     error AttestationValidatorMismatch();
     error AttestationTimedOut();
+    error AttesterMismatch();
+    error EntryHashMismatch();
     error AttestationRequired();
+    error ExitHashMismatch();
     error CallbackSizeMismatch();
     error CallbackFailed(uint256 index);
 
-    struct Attestation {
-        address attester;
-        uint256 timestamp;
-        bytes32 attestationHash;
-        address validator;
-        bytes[] callbacks;
-        address[] callbackRecipients;
-    }
-
     bytes32 private constant _ATTESTATION_TYPEHASH = keccak256(
-        "Attestation(address attester,uint256 timestamp,bytes32 attestationHash,address validator,bytes[] callbacks,address[] callbackRecipients)"
+        "Attestation(address attester,uint256 timestamp,uint256 timeout,bytes32 entryHash,bytes32 exitHash,address validator,bytes[] calls,address[] recipients)"
     );
 
-    // TODO: This should be access-controlled.
-    address authorizedAttester;
+    constructor() EIP712("SecurityValidator", "1") {}
 
-    bool disableValidation;
-
-    constructor(address _authorizedAttester, bool _disableValidation) EIP712("SecurityValidator", "1") {
-        authorizedAttester = _authorizedAttester;
-        disableValidation = _disableValidation;
-    }
-
-    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
-        if (isDisabled()) return;
+    function saveAttestation(
+        Attestation calldata attestation,
+        bytes calldata attestationSignature,
+        address sender,
+        bytes calldata callData
+    ) public {
         if (attestation.validator != address(this)) {
             revert AttestationValidatorMismatch();
         }
-        if (block.timestamp > attestation.timestamp && block.timestamp - attestation.timestamp > ATTESTATION_TIMEOUT) {
+        if (block.timestamp > attestation.timestamp && block.timestamp - attestation.timestamp > attestation.timeout) {
             revert AttestationTimedOut();
         }
-        if (attestation.callbacks.length != attestation.callbackRecipients.length) {
+        if (attestation.calls.length != attestation.recipients.length) {
             revert CallbackSizeMismatch();
         }
+
+        bytes32 entryHash = keccak256(abi.encode(tx.origin, msg.sender, sender, callData));
+        if (attestation.entryHash != entryHash) {
+            revert EntryHashMismatch();
+        }
+
         bytes32 structHash = hashAttestation(attestation);
         address attester = ECDSA.recover(structHash, attestationSignature);
 
-        // TODO: Instead, make an access control check later.
-        require(attester == authorizedAttester);
-
-        bytes32 attestationHash = attestation.attestationHash;
-        assembly {
-            tstore(ATTESTATION_HASH_SLOT, attestationHash)
+        if (attester != attestation.attester) {
+            revert AttesterMismatch();
         }
 
-        for (uint256 i = 0; i < attestation.callbacks.length; i++) {
-            (bool success,) = attestation.callbackRecipients[i].call(attestation.callbacks[i]);
+        assembly {
+            tstore(ATTESTER_SLOT, attester)
+        }
+
+        assembly {
+            tstore(ENTRY_HASH_SLOT, entryHash)
+        }
+
+        bytes32 exitHash = attestation.exitHash;
+        assembly {
+            tstore(EXIT_HASH_SLOT, exitHash)
+        }
+
+        for (uint256 i = 0; i < attestation.calls.length; i++) {
+            (bool success,) = attestation.recipients[i].call(attestation.calls[i]);
             if (!success) revert CallbackFailed(i);
         }
+    }
+
+    function getAttester() public view returns (address) {
+        address attester;
+        assembly {
+            attester := tload(ATTESTER_SLOT)
+        }
+        return attester;
     }
 
     function hashAttestation(Attestation calldata attestation) public view returns (bytes32) {
@@ -77,63 +117,80 @@ contract SecurityValidator is EIP712 {
                     _ATTESTATION_TYPEHASH,
                     attestation.attester,
                     attestation.timestamp,
-                    attestation.attestationHash,
-                    keccak256(abi.encode(attestation.callbacks)),
-                    keccak256(abi.encode(attestation.callbackRecipients))
+                    attestation.timeout,
+                    attestation.entryHash,
+                    attestation.exitHash,
+                    attestation.validator,
+                    keccak256(abi.encode(attestation.calls)),
+                    keccak256(abi.encode(attestation.recipients))
                 )
             )
         );
     }
 
     function executeCheckpoint(bytes32 checkpointHash) public {
-        // If the validator is not disabled in this transaction
-        // and there is no attestation, then the checkpoint execution should revert.
-        //
-        // Not having attestation means not having a final validateAttestation().
-        // Any checkpoint should catch this case.
-        if (!isDisabled() && !isAttested()) revert AttestationRequired();
+        if (!isAttested()) revert AttestationRequired();
 
-        bytes32 latestApprovalHash;
+        bytes32 executionHash;
         assembly {
-            latestApprovalHash := tload(APPROVAL_HASH_SLOT)
+            executionHash := tload(EXECUTION_HASH_SLOT)
         }
-        bytes32 currentApprovalHash = approvalHashOf(checkpointHash, msg.sender, latestApprovalHash);
+
+        // Fall back to entry hash at the first checkpoint execution.
+        if (uint256(executionHash) == 0) {
+            assembly {
+                executionHash := tload(ENTRY_HASH_SLOT)
+            }
+        }
+
+        executionHash = executionHashFom(checkpointHash, msg.sender, executionHash);
         assembly {
-            tstore(APPROVAL_HASH_SLOT, currentApprovalHash)
+            tstore(EXECUTION_HASH_SLOT, executionHash)
         }
     }
 
-    function approvalHashOf(bytes32 checkpointHash, address caller, bytes32 latestApprovalHash)
+    function executionHashFom(bytes32 checkpointHash, address caller, bytes32 executionHash)
         public
         pure
         returns (bytes32)
     {
-        return keccak256(abi.encode(checkpointHash, caller, latestApprovalHash));
+        return keccak256(abi.encode(checkpointHash, caller, executionHash));
     }
 
-    function validateAttestation() public view {
-        if (isDisabled()) return;
+    function validateAttestation() public {
+        if (bypass()) return;
 
-        bytes32 attestationHash;
-        bytes32 latestApprovalHash;
+        bytes32 exitHash;
+        bytes32 executionHash;
         assembly {
-            attestationHash := tload(ATTESTATION_HASH_SLOT)
-            latestApprovalHash := tload(APPROVAL_HASH_SLOT)
+            exitHash := tload(EXIT_HASH_SLOT)
+            executionHash := tload(EXECUTION_HASH_SLOT)
         }
-        if (attestationHash != latestApprovalHash) {
-            revert AttestationRequired();
+        if (exitHash != executionHash) {
+            revert ExitHashMismatch();
+        }
+
+        emptyTransientStorage();
+    }
+
+    function emptyTransientStorage() internal {
+        assembly {
+            tstore(ATTESTER_SLOT, 0)
+            tstore(ENTRY_HASH_SLOT, 0)
+            tstore(EXIT_HASH_SLOT, 0)
+            tstore(EXECUTION_HASH_SLOT, 0)
         }
     }
 
     function isAttested() internal view returns (bool) {
-        bytes32 attestationHash;
+        bytes32 attester;
         assembly {
-            attestationHash := tload(ATTESTATION_HASH_SLOT)
+            attester := tload(ATTESTER_SLOT)
         }
-        return uint256(attestationHash) > 0;
+        return uint256(attester) > 0;
     }
 
-    function isDisabled() internal view returns (bool) {
-        return disableValidation || (BYPASS_FLAG.code.length > 0);
+    function bypass() internal view returns (bool) {
+        return (BYPASS_FLAG.code.length > 0);
     }
 }

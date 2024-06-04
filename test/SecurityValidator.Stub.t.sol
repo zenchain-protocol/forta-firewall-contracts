@@ -36,7 +36,7 @@ contract SecurityValidatorStubTest is Test {
         validator = new SecurityValidator(attester, VALIDATION_IS_DISABLED);
         policy = new SecurityPolicy(validator);
 
-		// use empty attestation
+        // use empty attestation
         bytes32 hashOfAttestation = validator.hashAttestation(attestation);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(attesterPrivateKey, hashOfAttestation);
         attestationSignature = abi.encodePacked(r, s, v);
