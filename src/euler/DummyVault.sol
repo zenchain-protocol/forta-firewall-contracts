@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 import "evc/interfaces/IVault.sol";
-import {ISecurityPolicy} from "../SecurityPolicy.sol";
+import {ISecurityPolicy, Threshold} from "../SecurityPolicy.sol";
 
 bytes32 constant DoFirstCheckpoint = keccak256("doFirst");
 bytes32 constant DoSecondCheckpoint = keccak256("doSecond");
@@ -27,10 +27,10 @@ contract DummyVault is IVault {
     }
 
     function doFirst(uint256 amount) public {
-        policyContract.executeCheckpoint(DoFirstCheckpoint, amount);
+        policyContract.executeCheckpoint(DoFirstCheckpoint, amount, Threshold.Accumulated);
     }
 
     function doSecond(uint256 amount) public {
-        policyContract.executeCheckpoint(DoSecondCheckpoint, amount);
+        policyContract.executeCheckpoint(DoSecondCheckpoint, amount, Threshold.Accumulated);
     }
 }

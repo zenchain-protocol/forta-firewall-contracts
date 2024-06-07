@@ -3,12 +3,18 @@ pragma solidity ^0.8.25;
 
 import "./SecurityValidator.sol";
 
+enum Threshold {
+    Constant,
+    Accumulated
+}
+
 interface ISecurityPolicy {
-    function executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount) external;
+    function executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount, Threshold thresholdType) external;
 }
 
 contract SecurityPolicy {
     error UntrustedAttester();
+    error InvalidThresholdType();
 
     mapping(bytes32 => uint256) thresholds;
 
@@ -27,7 +33,7 @@ contract SecurityPolicy {
         thresholds[checkpointId] = newThreshold;
     }
 
-    function executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount) public {
+    function executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount, Threshold thresholdType) public {
         // TODO: Check current attester against multiple attesters.
         if (trustedValidator.getCurrentAttester() != trustedAttester) {
             revert UntrustedAttester();
@@ -35,6 +41,16 @@ contract SecurityPolicy {
 
         uint256 threshold = thresholds[checkpointId];
         bytes32 checkpointHash = checkpointHashOf(checkpointId, msg.sender);
+
+        if (thresholdType == Threshold.Constant && referenceAmount > threshold) {
+            trustedValidator.executeCheckpoint(checkpointHash);
+            return;
+        }
+
+        if (thresholdType != Threshold.Accumulated) {
+            revert InvalidThresholdType();
+        }
+
         uint256 acc;
         assembly {
             acc := tload(checkpointHash)
