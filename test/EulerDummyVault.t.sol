@@ -26,6 +26,9 @@ contract EulerDummyVaultTest is Test {
     Attestation attestation;
     bytes attestationSignature;
 
+    bytes32 checkpointHash1;
+    bytes32 checkpointHash2;
+
     function setUp() public {
         attesterPrivateKey = vm.parseUint("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
         attester = vm.addr(attesterPrivateKey);
@@ -49,18 +52,26 @@ contract EulerDummyVaultTest is Test {
 			)
 		);
 
-        bytes32 checkpointHash1 = policy.checkpointHashOf(DoFirstCheckpoint, address(vault));
-        bytes32 checkpointHash2 = policy.checkpointHashOf(DoSecondCheckpoint, address(vault));
-        bytes32 executionHash1 = keccak256(abi.encode(checkpointHash1, address(policy), attestation.entryHash));
-        bytes32 executionHash2 = keccak256(abi.encode(checkpointHash2, address(policy), executionHash1));
-        attestation.exitHash = executionHash2;
-        attestation.validator = address(validator);
+        _computeAttestationHashes(address(policy));
 
         // Let the validator schedule the final validation call by calling a helper specified
         // in the attestation.
         attestation.calls.push(abi.encodeWithSelector(helper.scheduleAttestationValidation.selector, address(evc)));
         attestation.recipients.push(address(helper));
 
+        _signAttestation();
+    }
+
+    function _computeAttestationHashes(address caller) public {
+        checkpointHash1 = policy.checkpointHashOf(DoFirstCheckpoint, address(vault));
+        checkpointHash2 = policy.checkpointHashOf(DoSecondCheckpoint, address(vault));
+        bytes32 executionHash1 = keccak256(abi.encode(checkpointHash1, caller, attestation.entryHash));
+        bytes32 executionHash2 = keccak256(abi.encode(checkpointHash2, caller, executionHash1));
+        attestation.exitHash = executionHash2;
+        attestation.validator = address(validator);
+    }
+
+    function _signAttestation() internal {
         bytes32 hashOfAttestation = validator.hashAttestation(attestation);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(attesterPrivateKey, hashOfAttestation);
         attestationSignature = abi.encodePacked(r, s, v);
@@ -137,5 +148,43 @@ contract EulerDummyVaultTest is Test {
         vm.broadcast(otherUserPrivateKey);
 		vm.expectRevert(abi.encodeWithSelector(SecurityValidator.EntryHashMismatch.selector));
         evc.batch(batch);
+    }
+
+    function test_attestationGas() public {
+        attestation.entryHash = keccak256(
+			abi.encode(
+				user, // tx.origin
+				user  // msg.sender
+			)
+		);
+        attestation.calls = new bytes[](0);
+        attestation.recipients = new address[](0);
+        _computeAttestationHashes(user);
+        _signAttestation();
+
+        vm.startPrank(user, user);
+
+        uint256 startGasLeft = gasleft();
+        uint256 prevGasLeft = startGasLeft;
+
+        validator.enterAttestedCall(attestation, attestationSignature);
+        console.log("enterAttestedCall():", prevGasLeft - gasleft());
+        prevGasLeft = gasleft();
+
+        validator.executeCheckpoint(checkpointHash1);
+        console.log("executeCheckpoint(1):", prevGasLeft - gasleft());
+        prevGasLeft = gasleft();
+
+        validator.executeCheckpoint(checkpointHash2);
+        console.log("executeCheckpoint(2):", prevGasLeft - gasleft());
+        prevGasLeft = gasleft();
+
+        validator.exitAttestedCall();
+        console.log("exitAttestedCall():", prevGasLeft - gasleft());
+        prevGasLeft = gasleft();
+
+        console.log("total:", startGasLeft - prevGasLeft);
+
+        vm.stopPrank();
     }
 }

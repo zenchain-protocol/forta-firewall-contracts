@@ -18,11 +18,11 @@ contract DummyVault is IVault {
         // no-op
     }
 
-    function checkAccountStatus(address account, address[] calldata collaterals) public returns (bytes4 magicValue) {
+    function checkAccountStatus(address, address[] calldata) public pure returns (bytes4 magicValue) {
         return 0xb168c58f;
     }
 
-    function checkVaultStatus() public returns (bytes4 magicValue) {
+    function checkVaultStatus() public pure returns (bytes4 magicValue) {
         return 0x4b3d1223;
     }
 

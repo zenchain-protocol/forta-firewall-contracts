@@ -10,8 +10,6 @@ uint256 constant ENTRY_HASH_SLOT = 1;
 uint256 constant EXIT_HASH_SLOT = 2;
 uint256 constant EXECUTION_HASH_SLOT = 3;
 
-address constant BYPASS_FLAG = 0x0000000000000000000000000000000000f01274; // "forta" in leetspeak
-
 struct Attestation {
     address attester;
     uint256 timestamp;
@@ -30,6 +28,7 @@ interface ISecurityValidator {
     function enterAttestedCall(Attestation calldata attestation, bytes calldata attestationSignature) external;
 
     function executeCheckpoint(bytes32 checkpointHash) external;
+    function executeCheckpointUnsafe(bytes32 checkpointHash) external;
 
     function exitAttestedCall() external;
 }
@@ -41,8 +40,8 @@ contract SecurityValidator is EIP712 {
     error EntryHashMismatch();
     error AttestationRequired();
     error ExitHashMismatch();
-    error CallbackSizeMismatch();
-    error CallbackFailed(uint256 index);
+    error AttestationCallSizeMismatch();
+    error AttestationCallFailed(uint256 index);
 
     bytes32 private constant _ATTESTATION_TYPEHASH = keccak256(
         "Attestation(address attester,uint256 timestamp,uint256 timeout,bytes32 entryHash,bytes32 exitHash,address validator,bytes[] calls,address[] recipients)"
@@ -58,7 +57,7 @@ contract SecurityValidator is EIP712 {
             revert AttestationTimedOut();
         }
         if (attestation.calls.length != attestation.recipients.length) {
-            revert CallbackSizeMismatch();
+            revert AttestationCallSizeMismatch();
         }
 
         bytes32 entryHash = keccak256(abi.encode(tx.origin, msg.sender));
@@ -88,7 +87,7 @@ contract SecurityValidator is EIP712 {
 
         for (uint256 i = 0; i < attestation.calls.length; i++) {
             (bool success,) = attestation.recipients[i].call(attestation.calls[i]);
-            if (!success) revert CallbackFailed(i);
+            if (!success) revert AttestationCallFailed(i);
         }
     }
 
@@ -120,7 +119,10 @@ contract SecurityValidator is EIP712 {
 
     function executeCheckpoint(bytes32 checkpointHash) public {
         if (!isAttested()) revert AttestationRequired();
+        executeCheckpointUnsafe(checkpointHash);
+    }
 
+    function executeCheckpointUnsafe(bytes32 checkpointHash) public {
         bytes32 executionHash;
         assembly {
             executionHash := tload(EXECUTION_HASH_SLOT)
@@ -148,8 +150,6 @@ contract SecurityValidator is EIP712 {
     }
 
     function exitAttestedCall() public {
-        if (bypass()) return;
-
         bytes32 exitHash;
         bytes32 executionHash;
         assembly {
@@ -178,9 +178,5 @@ contract SecurityValidator is EIP712 {
             attester := tload(ATTESTER_SLOT)
         }
         return uint256(attester) > 0;
-    }
-
-    function bypass() internal view returns (bool) {
-        return (BYPASS_FLAG.code.length > 0);
     }
 }
