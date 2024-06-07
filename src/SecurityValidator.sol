@@ -27,11 +27,11 @@ interface ISecurityValidator {
     function hashAttestation(Attestation calldata attestation) external view returns (bytes32);
     function getAttester() external view returns (address);
 
-    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
+    function enterAttestedCall(Attestation calldata attestation, bytes calldata attestationSignature) external;
 
     function executeCheckpoint(bytes32 checkpointHash) external;
 
-    function validateAttestation() external;
+    function exitAttestedCall() external;
 }
 
 contract SecurityValidator is EIP712 {
@@ -50,7 +50,7 @@ contract SecurityValidator is EIP712 {
 
     constructor() EIP712("SecurityValidator", "1") {}
 
-    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
+    function enterAttestedCall(Attestation calldata attestation, bytes calldata attestationSignature) public {
         if (attestation.validator != address(this)) {
             revert AttestationValidatorMismatch();
         }
@@ -147,7 +147,7 @@ contract SecurityValidator is EIP712 {
         return keccak256(abi.encode(checkpointHash, caller, executionHash));
     }
 
-    function validateAttestation() public {
+    function exitAttestedCall() public {
         if (bypass()) return;
 
         bytes32 exitHash;

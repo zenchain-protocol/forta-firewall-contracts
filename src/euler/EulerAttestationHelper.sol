@@ -20,7 +20,7 @@ contract EulerAttestationHelper {
         assembly {
             validator := tload(0)
         }
-        ISecurityValidator(validator).validateAttestation();
+        ISecurityValidator(validator).exitAttestedCall();
         assembly {
             tstore(0, 0) // reset the validator address slot
         }
