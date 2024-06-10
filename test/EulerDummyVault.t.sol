@@ -45,12 +45,8 @@ contract EulerDummyVaultTest is Test {
 
         attestation.attester = attester;
         attestation.timeout = 1000000000; // very large - in seconds
-        attestation.entryHash = keccak256(
-            abi.encode(
-                user, // tx.origin
-                evc // msg.sender
-            )
-        );
+        attestation.entryHash = bytes32(uint256(1));
+        attestation.enter = true;
 
         _computeAttestationHashes(address(policy));
 
@@ -85,7 +81,7 @@ contract EulerDummyVaultTest is Test {
             targetContract: address(validator),
             onBehalfOfAccount: user,
             value: 0,
-            data: abi.encodeWithSelector(SecurityValidator.enterAttestedCall.selector, attestation, attestationSignature)
+            data: abi.encodeWithSelector(SecurityValidator.saveAttestation.selector, attestation, attestationSignature)
         });
 
         // Call the first vault function.
@@ -116,7 +112,7 @@ contract EulerDummyVaultTest is Test {
             targetContract: address(validator),
             onBehalfOfAccount: user,
             value: 0,
-            data: abi.encodeWithSelector(SecurityValidator.enterAttestedCall.selector, attestation, attestationSignature)
+            data: abi.encodeWithSelector(SecurityValidator.saveAttestation.selector, attestation, attestationSignature)
         });
 
         // Call the second vault function only.
@@ -132,31 +128,8 @@ contract EulerDummyVaultTest is Test {
         evc.batch(batch);
     }
 
-    function test_attestedEVCBatch_entryHashMismatch() public {
-        IEVC.BatchItem[] memory batch = new IEVC.BatchItem[](1);
-
-        // Try to use the attestation for other user.
-        batch[0] = IEVC.BatchItem({
-            targetContract: address(validator),
-            onBehalfOfAccount: otherUser,
-            value: 0,
-            data: abi.encodeWithSelector(SecurityValidator.enterAttestedCall.selector, attestation, attestationSignature)
-        });
-
-        // No need to call vault methods - the error should be from enterAttestedCall()
-
-        vm.broadcast(otherUserPrivateKey);
-        vm.expectRevert(abi.encodeWithSelector(SecurityValidator.EntryHashMismatch.selector));
-        evc.batch(batch);
-    }
-
     function test_attestationGas() public {
-        attestation.entryHash = keccak256(
-            abi.encode(
-                user, // tx.origin
-                user // msg.sender
-            )
-        );
+        attestation.entryHash = bytes32(uint256(1));
         attestation.calls = new bytes[](0);
         attestation.recipients = new address[](0);
         _computeAttestationHashes(user);
@@ -167,8 +140,8 @@ contract EulerDummyVaultTest is Test {
         uint256 startGasLeft = gasleft();
         uint256 prevGasLeft = startGasLeft;
 
-        validator.enterAttestedCall(attestation, attestationSignature);
-        console.log("enterAttestedCall():", prevGasLeft - gasleft());
+        validator.saveAttestation(attestation, attestationSignature);
+        console.log("saveAttestation():", prevGasLeft - gasleft());
         prevGasLeft = gasleft();
 
         validator.executeCheckpoint(checkpointHash1);

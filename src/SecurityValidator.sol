@@ -14,6 +14,7 @@ struct Attestation {
     address attester;
     uint256 timestamp;
     uint256 timeout;
+    bool enter;
     bytes32 entryHash;
     bytes32 exitHash;
     address validator;
@@ -25,12 +26,17 @@ interface ISecurityValidator {
     function hashAttestation(Attestation calldata attestation) external view returns (bytes32);
     function getAttester() external view returns (address);
 
-    function enterAttestedCall(Attestation calldata attestation, bytes calldata attestationSignature) external;
+    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
+
+    function tryEnterAttestedCall(bytes32 callHash) external returns (bool);
 
     function executeCheckpoint(bytes32 checkpointHash) external;
     function executeCheckpointUnsafe(bytes32 checkpointHash) external;
 
     function exitAttestedCall() external;
+
+    function isExecuting() external view returns (bool);
+    function isAttested() external view returns (bool);
 }
 
 contract SecurityValidator is EIP712 {
@@ -44,12 +50,12 @@ contract SecurityValidator is EIP712 {
     error AttestationCallFailed(uint256 index);
 
     bytes32 private constant _ATTESTATION_TYPEHASH = keccak256(
-        "Attestation(address attester,uint256 timestamp,uint256 timeout,bytes32 entryHash,bytes32 exitHash,address validator,bytes[] calls,address[] recipients)"
+        "Attestation(address attester,uint256 timestamp,uint256 timeout,bool enter,bytes32 entryHash,bytes32 exitHash,address validator,bytes[] calls,address[] recipients)"
     );
 
     constructor() EIP712("SecurityValidator", "1") {}
 
-    function enterAttestedCall(Attestation calldata attestation, bytes calldata attestationSignature) public {
+    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
         if (attestation.validator != address(this)) {
             revert AttestationValidatorMismatch();
         }
@@ -58,11 +64,6 @@ contract SecurityValidator is EIP712 {
         }
         if (attestation.calls.length != attestation.recipients.length) {
             revert AttestationCallSizeMismatch();
-        }
-
-        bytes32 entryHash = keccak256(abi.encode(tx.origin, msg.sender));
-        if (attestation.entryHash != entryHash) {
-            revert EntryHashMismatch();
         }
 
         bytes32 structHash = hashAttestation(attestation);
@@ -76,8 +77,14 @@ contract SecurityValidator is EIP712 {
             tstore(ATTESTER_SLOT, attester)
         }
 
+        bytes32 entryHash = attestation.entryHash;
         assembly {
             tstore(ENTRY_HASH_SLOT, entryHash)
+        }
+        if (attestation.enter) {
+            assembly {
+                tstore(EXECUTION_HASH_SLOT, entryHash)
+            }
         }
 
         bytes32 exitHash = attestation.exitHash;
@@ -89,6 +96,7 @@ contract SecurityValidator is EIP712 {
             (bool success,) = attestation.recipients[i].call(attestation.calls[i]);
             if (!success) revert AttestationCallFailed(i);
         }
+
     }
 
     function getCurrentAttester() public view returns (address) {
@@ -115,6 +123,40 @@ contract SecurityValidator is EIP712 {
                 )
             )
         );
+    }
+
+    function tryEnterAttestedCall(bytes32 callHash) public returns (bool entered) {
+        if (isExecuting() || !isAttested()) return false;
+
+        bytes32 computed = keccak256(abi.encode(msg.sender, callHash));
+        bytes32 entryHash;
+        assembly {
+            entryHash := tload(ENTRY_HASH_SLOT)
+        }
+
+        if (entryHash != computed) {
+            revert EntryHashMismatch();
+        }
+        assembly {
+            tstore(EXECUTION_HASH_SLOT, entryHash)
+        }
+        return true;
+    }
+
+    function isExecuting() public view returns (bool) {
+        bytes32 executionHash;
+        assembly {
+            executionHash := tload(EXECUTION_HASH_SLOT)
+        }
+        return uint256(executionHash) > 0;
+    }
+
+    function isAttested() public view returns (bool) {
+        bytes32 attester;
+        assembly {
+            attester := tload(ATTESTER_SLOT)
+        }
+        return uint256(attester) > 0;
     }
 
     function executeCheckpoint(bytes32 checkpointHash) public {
@@ -170,13 +212,5 @@ contract SecurityValidator is EIP712 {
             tstore(EXIT_HASH_SLOT, 0)
             tstore(EXECUTION_HASH_SLOT, 0)
         }
-    }
-
-    function isAttested() internal view returns (bool) {
-        bytes32 attester;
-        assembly {
-            attester := tload(ATTESTER_SLOT)
-        }
-        return uint256(attester) > 0;
     }
 }

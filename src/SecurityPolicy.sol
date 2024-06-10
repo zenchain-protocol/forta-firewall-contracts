@@ -9,7 +9,12 @@ enum Threshold {
 }
 
 interface ISecurityPolicy {
+    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
+    function enterCall(bytes32 callHash) external returns (bool entered);
     function executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount, Threshold thresholdType) external;
+    function exitCall() external;
+    function isExecuting() external view returns (bool);
+    function isAttested() external view returns (bool);
 }
 
 contract SecurityPolicy {
@@ -31,6 +36,14 @@ contract SecurityPolicy {
     // TODO: Implement access control.
     function adjustCheckpointThreshold(bytes32 checkpointId, uint256 newThreshold) public {
         thresholds[checkpointId] = newThreshold;
+    }
+
+    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
+        trustedValidator.saveAttestation(attestation, attestationSignature);
+    }
+
+    function enterCall(bytes32 callHash) public returns (bool entered) {
+        return trustedValidator.tryEnterAttestedCall(callHash);
     }
 
     function executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount, Threshold thresholdType) public {
@@ -63,6 +76,18 @@ contract SecurityPolicy {
         assembly {
             tstore(checkpointHash, acc) // accumulate for the next time
         }
+    }
+
+    function exitCall() public {
+        trustedValidator.exitAttestedCall();
+    }
+
+    function isExecuting() public view returns (bool) {
+        return trustedValidator.isExecuting();
+    }
+
+    function isAttested() public view returns (bool) {
+        return trustedValidator.isAttested();
     }
 
     function checkpointHashOf(bytes32 checkpointId, address caller) public pure returns (bytes32) {
