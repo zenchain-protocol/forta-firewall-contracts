@@ -14,7 +14,7 @@ struct Attestation {
     address attester;
     uint256 timestamp;
     uint256 timeout;
-    bool enter;
+    bool enter; // useful when exit call is scheduled independently
     bytes32 entryHash;
     bytes32 exitHash;
     address validator;
@@ -96,7 +96,6 @@ contract SecurityValidator is EIP712 {
             (bool success,) = attestation.recipients[i].call(attestation.calls[i]);
             if (!success) revert AttestationCallFailed(i);
         }
-
     }
 
     function getCurrentAttester() public view returns (address) {

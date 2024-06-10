@@ -9,8 +9,7 @@ bytes32 constant DoFirstCheckpoint = keccak256("doFirst");
 bytes32 constant DoSecondCheckpoint = keccak256("doSecond");
 
 contract DummyVault is IVault, Attestable {
-    constructor(ISecurityPolicy _policyContract) Attestable(_policyContract) {
-    }
+    constructor(ISecurityPolicy _policyContract) Attestable(_policyContract) {}
 
     function disableController() public {
         // no-op
@@ -24,11 +23,7 @@ contract DummyVault is IVault, Attestable {
         return 0x4b3d1223;
     }
 
-    function doFirst(uint256 amount) public checkpoint(DoFirstCheckpoint, amount, Threshold.Accumulated) {
+    function doFirst(uint256 amount) public checkpoint(DoFirstCheckpoint, amount, Threshold.Accumulated) {}
 
-    }
-
-    function doSecond(uint256 amount) public checkpoint(DoSecondCheckpoint, amount, Threshold.Accumulated) {
-
-    }
+    function doSecond(uint256 amount) public checkpoint(DoSecondCheckpoint, amount, Threshold.Accumulated) {}
 }

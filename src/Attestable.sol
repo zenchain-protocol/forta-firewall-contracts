@@ -18,8 +18,11 @@ abstract contract Attestable {
         _;
         if (entered) policyContract.exitCall();
     }
-    
-    function _executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount, Threshold thresholdType) internal returns (bool entered) {
+
+    function _executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount, Threshold thresholdType)
+        internal
+        returns (bool entered)
+    {
         bool executing = policyContract.isExecuting();
         bool attested = policyContract.isAttested();
 
