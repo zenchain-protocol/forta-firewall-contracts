@@ -5,7 +5,7 @@ import "evc/interfaces/IEthereumVaultConnector.sol";
 import {ISecurityValidator} from "../SecurityValidator.sol";
 
 // This is not a vault but allows us to schedule a final hook by using
-// the attestation calls.
+// the calls in the saved attestation.
 contract EulerAttestationHelper {
     function scheduleAttestationValidation(IEVC evc) public {
         address validator = msg.sender;
@@ -20,7 +20,7 @@ contract EulerAttestationHelper {
         assembly {
             validator := tload(0)
         }
-        ISecurityValidator(validator).exitAttestedCall();
+        ISecurityValidator(validator).validateExecution();
         assembly {
             tstore(0, 0) // reset the validator address slot
         }

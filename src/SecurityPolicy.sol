@@ -10,11 +10,11 @@ enum Threshold {
 
 interface ISecurityPolicy {
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
-    function enterCall(bytes32 callHash) external returns (bool entered);
-    function executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount, Threshold thresholdType) external;
+    function validateExecution() external;
+    function enterCall() external returns (uint256 depth);
+    function executeCheckpoint(bytes32 checkpointId, bytes32 callHash, uint256 referenceAmount, Threshold thresholdType)
+        external;
     function exitCall() external;
-    function isExecuting() external view returns (bool);
-    function isAttested() external view returns (bool);
 }
 
 contract SecurityPolicy {
@@ -23,12 +23,12 @@ contract SecurityPolicy {
 
     mapping(bytes32 => uint256) thresholds;
 
-    SecurityValidator trustedValidator;
+    ISecurityValidator trustedValidator;
 
     // TODO: This can alternatively point to an attester registry later.
     address trustedAttester;
 
-    constructor(SecurityValidator _trustedValidator, address _trustedAttester) {
+    constructor(ISecurityValidator _trustedValidator, address _trustedAttester) {
         trustedValidator = _trustedValidator;
         trustedAttester = _trustedAttester;
     }
@@ -42,18 +42,26 @@ contract SecurityPolicy {
         trustedValidator.saveAttestation(attestation, attestationSignature);
     }
 
-    function enterCall(bytes32 callHash) public returns (bool entered) {
-        return trustedValidator.tryEnterAttestedCall(callHash);
+    function enterCall() public returns (uint256 depth) {
+        return trustedValidator.enterCall();
     }
 
-    function executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount, Threshold thresholdType) public {
+    function exitCall() public {
+        trustedValidator.exitCall();
+    }
+
+    function executeCheckpoint(bytes32 checkpointId, bytes32 callHash, uint256 referenceAmount, Threshold thresholdType)
+        public
+    {
         // TODO: Check current attester against multiple attesters.
         if (trustedValidator.getCurrentAttester() != trustedAttester) {
-            revert UntrustedAttester();
+            if (BYPASS_FLAG.code.length == 0) {
+                revert UntrustedAttester();
+            }
         }
 
         uint256 threshold = thresholds[checkpointId];
-        bytes32 checkpointHash = checkpointHashOf(checkpointId, msg.sender);
+        bytes32 checkpointHash = checkpointHashOf(checkpointId, callHash, msg.sender);
 
         if (thresholdType == Threshold.Constant && referenceAmount > threshold) {
             trustedValidator.executeCheckpoint(checkpointHash);
@@ -78,22 +86,14 @@ contract SecurityPolicy {
         }
     }
 
-    function exitCall() public {
-        trustedValidator.exitAttestedCall();
+    function validateExecution() public {
+        trustedValidator.validateExecution();
     }
 
-    function isExecuting() public view returns (bool) {
-        return trustedValidator.isExecuting();
-    }
-
-    function isAttested() public view returns (bool) {
-        return trustedValidator.isAttested();
-    }
-
-    function checkpointHashOf(bytes32 checkpointId, address caller) public pure returns (bytes32) {
+    function checkpointHashOf(bytes32 checkpointId, bytes32 callHash, address caller) public pure returns (bytes32) {
         // Re-hashing here to make execution specific to every calling contract.
         // If a different contract uses the same checkpoint id and hash and calls this
         // policy contract, then the forwarded checkpoint hash is different due to the caller.
-        return keccak256(abi.encode(checkpointId, caller));
+        return keccak256(abi.encode(checkpointId, callHash, caller));
     }
 }

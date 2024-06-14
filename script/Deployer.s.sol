@@ -16,7 +16,7 @@ contract DeployerScript is Script {
         address attester = vm.addr(attesterPrivateKey);
 
         SecurityValidator validator = new SecurityValidator();
-        SecurityPolicy policy = new SecurityPolicy(validator, attester);
+        SecurityPolicy policy = new SecurityPolicy(ISecurityValidator(address(validator)), attester);
         console.log("validator contract:", address(validator));
         console.log("policy contract:", address(policy));
 
