@@ -35,7 +35,6 @@ interface ISecurityValidator {
 }
 
 contract SecurityValidator is EIP712 {
-    error AttestationValidatorMismatch();
     error AttestationTimedOut();
     error AttesterMismatch();
     error AttestationRequired();
@@ -46,15 +45,12 @@ contract SecurityValidator is EIP712 {
     event CheckpointExecuted(address validator, bytes32 executionHash);
 
     bytes32 private constant _ATTESTATION_TYPEHASH = keccak256(
-        "Attestation(address attester,uint256 timestamp,uint256 timeout,bytes32 finalHash,address validator,bytes[] calls,address[] recipients)"
+        "Attestation(address attester,uint256 timestamp,uint256 timeout,bytes32 finalHash,bytes[] calls,address[] recipients)"
     );
 
     constructor() EIP712("SecurityValidator", "1") {}
 
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
-        if (attestation.validator != address(this)) {
-            revert AttestationValidatorMismatch();
-        }
         if (block.timestamp > attestation.timestamp && block.timestamp - attestation.timestamp > attestation.timeout) {
             revert AttestationTimedOut();
         }
