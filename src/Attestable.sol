@@ -46,6 +46,5 @@ abstract contract Attestable {
     {
         policyContract.saveAttestation(attestation, attestationSignature);
         Address.functionDelegateCall(address(this), data);
-        policyContract.validateExecution();
     }
 }

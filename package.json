@@ -1,0 +1,35 @@
+{
+  "name": "forta-security-contracts",
+  "version": "1.0.0",
+  "description": "Forta security contracts",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "attest": "node script/sendAttestedEvcTx.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/forta-network/forta-security-contracts.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/forta-network/forta-security-contracts/issues"
+  },
+  "homepage": "https://github.com/forta-network/forta-security-contracts#readme",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.5.0",
+    "eslint": "^9.5.0",
+    "globals": "^15.6.0"
+  }
+}

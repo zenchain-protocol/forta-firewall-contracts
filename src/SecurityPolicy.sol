@@ -10,7 +10,6 @@ enum Threshold {
 
 interface ISecurityPolicy {
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
-    function validateExecution() external;
     function enterCall() external returns (uint256 depth);
     function executeCheckpoint(bytes32 checkpointId, bytes32 callHash, uint256 referenceAmount, Threshold thresholdType)
         external;
@@ -84,10 +83,6 @@ contract SecurityPolicy {
         assembly {
             tstore(checkpointHash, acc) // accumulate for the next time
         }
-    }
-
-    function validateExecution() public {
-        trustedValidator.validateExecution();
     }
 
     function checkpointHashOf(bytes32 checkpointId, bytes32 callHash, address caller) public pure returns (bytes32) {

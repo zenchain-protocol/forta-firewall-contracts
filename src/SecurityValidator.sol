@@ -6,20 +6,18 @@ import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
 uint256 constant ATTESTER_SLOT = 0;
-uint256 constant FINAL_HASH_SLOT = 1;
-uint256 constant EXECUTION_HASH_SLOT = 2;
-uint256 constant DEPTH_SLOT = 3;
+uint256 constant DEPTH_SLOT = 1;
+uint256 constant HASH_SLOT = 2;
+uint256 constant HASH_COUNT_SLOT = 3;
+uint256 constant HASH_CACHE_INDEX_SLOT = 4;
+uint256 constant HASH_CACHE_START_SLOT = 5;
 
 address constant BYPASS_FLAG = 0x0000000000000000000000000000000000f01274; // "forta" in leetspeak
 
 struct Attestation {
-    address attester;
     uint256 timestamp;
     uint256 timeout;
-    bytes32 finalHash;
-    address validator;
-    bytes[] calls;
-    address[] recipients;
+    bytes32[] executionHashes;
 }
 
 interface ISecurityValidator {
@@ -27,7 +25,6 @@ interface ISecurityValidator {
     function getCurrentAttester() external view returns (address);
 
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
-    function validateExecution() external;
 
     function enterCall() external returns (uint256 depth);
     function executeCheckpoint(bytes32 checkpointHash) external;
@@ -36,16 +33,14 @@ interface ISecurityValidator {
 
 contract SecurityValidator is EIP712 {
     error AttestationTimedOut();
-    error AttesterMismatch();
     error AttestationRequired();
-    error ValidationFailed(address validator, bytes32 computedHash);
-    error AttestationCallSizeMismatch();
-    error AttestationCallFailed(uint256 index);
+    error HashCountExceeded(uint256 atIndex);
+    error InvalidExecutionHash(address validator, bytes32 expectedHash, bytes32 computedHash);
 
     event CheckpointExecuted(address validator, bytes32 executionHash);
 
     bytes32 private constant _ATTESTATION_TYPEHASH = keccak256(
-        "Attestation(address attester,uint256 timestamp,uint256 timeout,bytes32 finalHash,bytes[] calls,address[] recipients)"
+        "Attestation(uint256 timestamp,uint256 timeout,bytes32[] executionHashes)"
     );
 
     constructor() EIP712("SecurityValidator", "1") {}
@@ -54,29 +49,27 @@ contract SecurityValidator is EIP712 {
         if (block.timestamp > attestation.timestamp && block.timestamp - attestation.timestamp > attestation.timeout) {
             revert AttestationTimedOut();
         }
-        if (attestation.calls.length != attestation.recipients.length) {
-            revert AttestationCallSizeMismatch();
-        }
 
         bytes32 structHash = hashAttestation(attestation);
         address attester = ECDSA.recover(structHash, attestationSignature);
 
-        if (attester != attestation.attester) {
-            revert AttesterMismatch();
-        }
-
+        // Initialize and empty transient storage.
+        uint256 hashCount = attestation.executionHashes.length;
         assembly {
             tstore(ATTESTER_SLOT, attester)
+            tstore(DEPTH_SLOT, 0)
+            tstore(HASH_SLOT, 0)
+            tstore(HASH_COUNT_SLOT, hashCount)
+            tstore(HASH_CACHE_INDEX_SLOT, 0)
         }
 
-        bytes32 finalHash = attestation.finalHash;
-        assembly {
-            tstore(FINAL_HASH_SLOT, finalHash)
-        }
-
-        for (uint256 i = 0; i < attestation.calls.length; i++) {
-            (bool success,) = attestation.recipients[i].call(attestation.calls[i]);
-            if (!success) revert AttestationCallFailed(i);
+        // Store all execution hashes.
+        for (uint256 i = 0; i < attestation.executionHashes.length; i++) {
+            bytes32 execHash = attestation.executionHashes[i];
+            uint256 currIndex = HASH_CACHE_START_SLOT + i;
+            assembly {
+                tstore(currIndex, execHash)
+            }
         }
     }
 
@@ -93,13 +86,9 @@ contract SecurityValidator is EIP712 {
             keccak256(
                 abi.encode(
                     _ATTESTATION_TYPEHASH,
-                    attestation.attester,
                     attestation.timestamp,
                     attestation.timeout,
-                    attestation.finalHash,
-                    attestation.validator,
-                    keccak256(abi.encode(attestation.calls)),
-                    keccak256(abi.encode(attestation.recipients))
+                    keccak256(abi.encodePacked(attestation.executionHashes))
                 )
             )
         );
@@ -130,21 +119,46 @@ contract SecurityValidator is EIP712 {
     function executeCheckpoint(bytes32 checkpointHash) public {
         bytes32 executionHash;
         assembly {
-            executionHash := tload(EXECUTION_HASH_SLOT)
+            executionHash := tload(HASH_SLOT)
         }
 
         // If there is no attestation and the bypass flag is not used,
         // then the transaction should revert.
+        bool bypassed;
         if (uint160(getCurrentAttester()) == 0) {
             if (BYPASS_FLAG.code.length == 0) {
                 revert AttestationRequired();
+            } else {
+                bypassed = true;
             }
         }
 
         executionHash = executionHashFrom(checkpointHash, msg.sender, executionHash);
         emit CheckpointExecuted(address(this), executionHash);
+
+        uint256 cacheIndex;
+        uint256 hashCount;
         assembly {
-            tstore(EXECUTION_HASH_SLOT, executionHash)
+            cacheIndex := tload(HASH_CACHE_INDEX_SLOT)
+            hashCount := tload(HASH_COUNT_SLOT)
+        }
+        if (!bypassed && cacheIndex >= hashCount) {
+            revert HashCountExceeded(cacheIndex);
+        }
+
+        bytes32 cachedHash;
+        uint256 cachedHashSlot = cacheIndex + HASH_CACHE_START_SLOT;
+        assembly {
+            cachedHash := tload(cachedHashSlot)
+        }
+        if (!bypassed && executionHash != cachedHash) {
+            revert InvalidExecutionHash(address(this), cachedHash, executionHash);
+        }
+        cacheIndex++;
+
+        assembly {
+            tstore(HASH_SLOT, executionHash)
+            tstore(HASH_CACHE_INDEX_SLOT, cacheIndex)
         }
     }
 
@@ -154,27 +168,5 @@ contract SecurityValidator is EIP712 {
         returns (bytes32)
     {
         return keccak256(abi.encode(checkpointHash, caller, executionHash));
-    }
-
-    function validateExecution() public {
-        bytes32 finalHash;
-        bytes32 executionHash;
-        assembly {
-            finalHash := tload(FINAL_HASH_SLOT)
-            executionHash := tload(EXECUTION_HASH_SLOT)
-        }
-        if (finalHash != executionHash) {
-            revert ValidationFailed(address(this), executionHash);
-        }
-        emptyTransientStorage();
-    }
-
-    function emptyTransientStorage() internal {
-        assembly {
-            tstore(ATTESTER_SLOT, 0)
-            tstore(FINAL_HASH_SLOT, 0)
-            tstore(EXECUTION_HASH_SLOT, 0)
-            tstore(DEPTH_SLOT, 0)
-        }
     }
 }

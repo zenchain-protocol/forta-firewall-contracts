@@ -4,10 +4,10 @@ pragma solidity ^0.8.25;
 import {Test, console, Vm} from "forge-std/Test.sol";
 import "evc/interfaces/IEthereumVaultConnector.sol";
 import "evc/EthereumVaultConnector.sol";
-import "../src/euler/EulerAttestationHelper.sol";
 import "../src/euler/DummyVault.sol";
 import {ISecurityPolicy, SecurityPolicy} from "../src/SecurityPolicy.sol";
-import {Attestation, SecurityValidator, BYPASS_FLAG} from "../src/SecurityValidator.sol";
+import {Attestation, ISecurityValidator, SecurityValidator, BYPASS_FLAG} from "../src/SecurityValidator.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 contract EulerDummyVaultTest is Test {
     uint256 attesterPrivateKey;
@@ -20,14 +20,13 @@ contract EulerDummyVaultTest is Test {
     SecurityValidator validator;
     SecurityPolicy policy;
     IEVC evc;
-    EulerAttestationHelper helper;
     DummyVault vault;
 
     Attestation attestation;
     bytes attestationSignature;
 
-    bytes32 checkpointHash1;
-    bytes32 checkpointHash2;
+    bytes32 executionHash1;
+    bytes32 executionHash2;
 
     function setUp() public {
         attesterPrivateKey = vm.parseUint("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
@@ -40,35 +39,28 @@ contract EulerDummyVaultTest is Test {
         validator = new SecurityValidator();
         policy = new SecurityPolicy(ISecurityValidator(address(validator)), attester);
         evc = new EthereumVaultConnector();
-        helper = new EulerAttestationHelper();
         vault = new DummyVault(ISecurityPolicy(address(policy)));
 
-        attestation.attester = attester;
         attestation.timeout = 1000000000; // very large - in seconds
 
         _computeAttestationHashes(address(policy));
-
-        // Let the validator schedule the final validation call by calling a helper specified
-        // in the attestation.
-        attestation.calls.push(abi.encodeWithSelector(helper.scheduleAttestationValidation.selector, address(evc)));
-        attestation.recipients.push(address(helper));
-
         _signAttestation();
     }
 
     function _computeAttestationHashes(address caller) public {
         bytes memory call1 = abi.encodeWithSignature("doFirst(uint256)", 123);
         bytes32 callHash1 = keccak256(abi.encode(address(evc), call1));
-        checkpointHash1 = policy.checkpointHashOf(DoFirstCheckpoint, callHash1, address(vault));
-        bytes32 executionHash1 = validator.executionHashFrom(checkpointHash1, caller, bytes32(uint256(0)));
+        bytes32 checkpointHash1 = policy.checkpointHashOf(DoFirstCheckpoint, callHash1, address(vault));
+        executionHash1 = validator.executionHashFrom(checkpointHash1, caller, bytes32(uint256(0)));
 
         bytes memory call2 = abi.encodeWithSignature("doSecond(uint256)", 456);
         bytes32 callHash2 = keccak256(abi.encode(address(evc), call2));
-        checkpointHash2 = policy.checkpointHashOf(DoSecondCheckpoint, callHash2, address(vault));
-        bytes32 executionHash2 = validator.executionHashFrom(checkpointHash2, caller, executionHash1);
-
-        attestation.finalHash = executionHash2;
-        attestation.validator = address(validator);
+        bytes32 checkpointHash2 = policy.checkpointHashOf(DoSecondCheckpoint, callHash2, address(vault));
+        executionHash2 = validator.executionHashFrom(checkpointHash2, caller, executionHash1);
+        
+        attestation.executionHashes = new bytes32[](2);
+        attestation.executionHashes[0] = executionHash1;
+        attestation.executionHashes[1] = executionHash2;
     }
 
     function _signAttestation() internal {
@@ -149,7 +141,7 @@ contract EulerDummyVaultTest is Test {
             (foundValidator, foundHash) = abi.decode(entry.data, (address, bytes32));
         }
         assertEq(address(validator), foundValidator);
-        assertEq(bytes32(0xeda41292ef6ee0a321154cd8276c548e583a9b8c9cb0e0ff32397d929fa291aa), foundHash);
+        assertEq(bytes32(0xa7247c959f5cdf3cd7ddcd7d678a3144ee7b4f7aa990a89fffea48521b48e391), foundHash);
     }
 
     function test_validationFailure() public {
@@ -172,16 +164,20 @@ contract EulerDummyVaultTest is Test {
         });
 
         vm.broadcast(userPrivateKey);
-        bytes32 computedFinalHash = 0x67409cda751bd5047f1eb2ed0b95a7d39b99766956002b8de3bc3fbf994a8d0c;
+        bytes32 expectedHash = 0x977bc7e7db2e3b4a8c0c1429b918361dd3088df77fc5e376845e935419067de1;
+        bytes32 computedHash = 0x717422506f33fe9a54df6f78e07e37b48c4f1bdc0616c68107571d74488a5a01;
         vm.expectRevert(
-            abi.encodeWithSelector(SecurityValidator.ValidationFailed.selector, address(validator), computedFinalHash)
+            abi.encodeWithSelector(
+                SecurityValidator.InvalidExecutionHash.selector,
+                address(validator),
+                expectedHash,
+                computedHash
+            )
         );
         evc.batch(batch);
     }
 
     function test_attestationGas() public {
-        attestation.calls = new bytes[](0);
-        attestation.recipients = new address[](0);
         _computeAttestationHashes(address(policy));
         _signAttestation();
 
@@ -200,10 +196,6 @@ contract EulerDummyVaultTest is Test {
 
         vault.doSecond(456);
         console.log("doSecond(456):", prevGasLeft - gasleft());
-        prevGasLeft = gasleft();
-
-        validator.validateExecution();
-        console.log("validateExecution():", prevGasLeft - gasleft());
         prevGasLeft = gasleft();
 
         console.log("total:", startGasLeft - prevGasLeft);
