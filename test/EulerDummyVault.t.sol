@@ -41,7 +41,8 @@ contract EulerDummyVaultTest is Test {
         evc = new EthereumVaultConnector();
         vault = new DummyVault(ISecurityPolicy(address(policy)));
 
-        attestation.timeout = 1000000000; // very large - in seconds
+        /// very large - in seconds
+        attestation.timeout = 1000000000;
 
         _computeAttestationHashes(address(policy));
         _signAttestation();
@@ -72,7 +73,7 @@ contract EulerDummyVaultTest is Test {
     function test_attestedEVCBatch() public {
         IEVC.BatchItem[] memory batch = new IEVC.BatchItem[](3);
 
-        // Save the attestation first.
+        /// Save the attestation first.
         batch[0] = IEVC.BatchItem({
             targetContract: address(validator),
             onBehalfOfAccount: user,
@@ -80,7 +81,7 @@ contract EulerDummyVaultTest is Test {
             data: abi.encodeWithSelector(SecurityValidator.saveAttestation.selector, attestation, attestationSignature)
         });
 
-        // Call the first vault function.
+        /// Call the first vault function.
         batch[1] = IEVC.BatchItem({
             targetContract: address(vault),
             onBehalfOfAccount: user,
@@ -88,7 +89,7 @@ contract EulerDummyVaultTest is Test {
             data: abi.encodeWithSelector(DummyVault.doFirst.selector, 123)
         });
 
-        // Call the second vault function.
+        /// Call the second vault function.
         batch[2] = IEVC.BatchItem({
             targetContract: address(vault),
             onBehalfOfAccount: user,
@@ -103,9 +104,9 @@ contract EulerDummyVaultTest is Test {
     function test_debugValidation() public {
         IEVC.BatchItem[] memory batch = new IEVC.BatchItem[](2);
 
-        // Skip attestation.
+        /// Skip attestation.
 
-        // Call the first vault function.
+        /// Call the first vault function.
         batch[0] = IEVC.BatchItem({
             targetContract: address(vault),
             onBehalfOfAccount: user,
@@ -113,7 +114,7 @@ contract EulerDummyVaultTest is Test {
             data: abi.encodeWithSelector(DummyVault.doFirst.selector, 123)
         });
 
-        // Call the second vault function.
+        /// Call the second vault function.
         batch[1] = IEVC.BatchItem({
             targetContract: address(vault),
             onBehalfOfAccount: user,
@@ -121,8 +122,8 @@ contract EulerDummyVaultTest is Test {
             data: abi.encodeWithSelector(DummyVault.doSecond.selector, 456)
         });
 
-        // Avoid revert without attestation by using the bypass flag
-        // and capture the values from the log.
+        /// Avoid revert without attestation by using the bypass flag
+        /// and capture the values from the log.
         vm.etch(BYPASS_FLAG, bytes("1"));
         vm.recordLogs();
         vm.broadcast(userPrivateKey);
@@ -147,7 +148,7 @@ contract EulerDummyVaultTest is Test {
     function test_validationFailure() public {
         IEVC.BatchItem[] memory batch = new IEVC.BatchItem[](2);
 
-        // Save the attestation first.
+        /// Save the attestation first.
         batch[0] = IEVC.BatchItem({
             targetContract: address(validator),
             onBehalfOfAccount: user,
@@ -155,7 +156,7 @@ contract EulerDummyVaultTest is Test {
             data: abi.encodeWithSelector(SecurityValidator.saveAttestation.selector, attestation, attestationSignature)
         });
 
-        // Call the second vault function only.
+        /// Call the second vault function only.
         batch[1] = IEVC.BatchItem({
             targetContract: address(vault),
             onBehalfOfAccount: user,

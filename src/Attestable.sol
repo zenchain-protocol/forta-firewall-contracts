@@ -5,7 +5,10 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import {Attestation} from "./SecurityValidator.sol";
 import {Threshold, ISecurityPolicy} from "./SecurityPolicy.sol";
 
-// This is for arbitrary contracts to support attested user calls.
+/**
+ * @title Attestation support for contracts
+ * @notice Serves as a base contract to enable checkpoint execution and benefit from attestations.
+ */
 abstract contract Attestable {
     ISecurityPolicy private policyContract;
 
@@ -13,21 +16,37 @@ abstract contract Attestable {
         policyContract = _policyContract;
     }
 
+    /**
+     * @notice A modifier which wraps a contract function with checkpoint execution.
+     * @param checkpointId Identifier of the checkpoint to be executed - can be anything.
+     * @param referenceAmount A value from the call that should be compared against the threshold
+     * which activates the checkpoint.
+     * @param thresholdType Threshold type of the checkpoint.
+     */
     modifier checkpoint(bytes32 checkpointId, uint256 referenceAmount, Threshold thresholdType) {
         _executeCheckpoint(checkpointId, referenceAmount, thresholdType);
         _;
         _exitCall();
     }
 
+    /**
+     * @notice An internal function that can be used for executing arbitrary checkpoint. If usage
+     * of this function is preferred over the modifier, such function must do _exitCall() before
+     * returning.
+     * @param checkpointId Identifier of the checkpoint to be executed - can be anything.
+     * @param referenceAmount A value from the call that should be compared against the threshold
+     * which activates the checkpoint.
+     * @param thresholdType Threshold type of the checkpoint.
+     */
     function _executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount, Threshold thresholdType) internal {
-        // Outermost calls need to rely on sender and call data during hash generation
-        // for checkpoint execution. This is needed for making the attestations specific to the
-        // outermost user calls that initiate the chain of calls down the call stack.
-        //
-        // For deeper calls, using call data can make attestations fragile since the arguments
-        // that are passed to intermediary calls can change depending on chain state. This is
-        // not the same for outer calls which depend on the exact kind of intents the user wants
-        // to execute.
+        /// Outermost calls need to rely on sender and call data during hash generation
+        /// for checkpoint execution. This is needed for making the attestations specific to the
+        /// outermost user calls that initiate the chain of calls down the call stack.
+        ///
+        /// For deeper calls, using call data can make attestations fragile since the arguments
+        /// that are passed to intermediary calls can change depending on chain state. This is
+        /// not the same for outer calls which depend on the exact kind of intents the user wants
+        /// to execute.
         uint256 depth = policyContract.enterCall();
         if (depth == 1) {
             bytes32 callHash = keccak256(abi.encode(msg.sender, msg.data));
@@ -37,10 +56,20 @@ abstract contract Attestable {
         }
     }
 
+    /**
+     * @notice If _executeCheckpoint() usage is preferred over the modifier, this must be called
+     * before the function returns.
+     */
     function _exitCall() internal {
         policyContract.exitCall();
     }
 
+    /**
+     * @notice Helps write an attestation and call any function of this contract.
+     * @param attestation The set of fields that correspond to and enable the execution of call(s)
+     * @param attestationSignature Signature of EIP-712 message
+     * @param data Call data which contains the function selector and the encoded arguments
+     */
     function attestedCall(Attestation calldata attestation, bytes calldata attestationSignature, bytes calldata data)
         public
     {

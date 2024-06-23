@@ -5,18 +5,23 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
-uint256 constant ATTESTER_SLOT = 0;
-uint256 constant DEPTH_SLOT = 1;
-uint256 constant HASH_SLOT = 2;
-uint256 constant HASH_COUNT_SLOT = 3;
-uint256 constant HASH_CACHE_INDEX_SLOT = 4;
-uint256 constant HASH_CACHE_START_SLOT = 5;
-
 address constant BYPASS_FLAG = 0x0000000000000000000000000000000000f01274; // "forta" in leetspeak
-
-struct Attestation {
-    uint256 timestamp;
+ 
+/// @notice Set of values that enable execution of call(s)
+struct Attestation { 
+    /// @notice Creation UNIX timestamp
+    uint256 timestamp; 
+    /** 
+     * @notice The amount of seconds until this attestation becomes invalid
+     * Expiry is preferred over non-replayability due to expiry being a
+     * sufficiently safe mechanism and not requiring persistent storage reads/writes.
+     */
     uint256 timeout;
+    /** 
+     * @notice Ordered hashes which should be produced at every checkpoint execution
+     * in this contract. An attester uses these hashes to enable a specific execution
+     * path.
+     */
     bytes32[] executionHashes;
 }
 
@@ -31,6 +36,11 @@ interface ISecurityValidator {
     function exitCall() external;
 }
 
+/**
+ * @title Validator contract used for attestations
+ * @notice A singleton to be used by attesters to enable execution and contracts to ensure
+ * that execution was enabled by an attester.
+ */
 contract SecurityValidator is EIP712 {
     error AttestationTimedOut();
     error AttestationRequired();
@@ -39,12 +49,32 @@ contract SecurityValidator is EIP712 {
 
     event CheckpointExecuted(address validator, bytes32 executionHash);
 
+    /**
+     * @notice Transient storage slots used for storing the attestation values
+     * and executing checkpoints 
+     */ 
+    uint256 constant ATTESTER_SLOT = 0;
+    uint256 constant DEPTH_SLOT = 1;
+    uint256 constant HASH_SLOT = 2;
+    uint256 constant HASH_COUNT_SLOT = 3;
+    uint256 constant HASH_CACHE_INDEX_SLOT = 4;
+    uint256 constant HASH_CACHE_START_SLOT = 5;
+
+    /// @notice Used for EIP-712 message hash calculation
     bytes32 private constant _ATTESTATION_TYPEHASH = keccak256(
         "Attestation(uint256 timestamp,uint256 timeout,bytes32[] executionHashes)"
     );
 
     constructor() EIP712("SecurityValidator", "1") {}
 
+    /**
+     * @notice Accepts and stores an attestation to the transient storage introduced
+     * with EIP-1153. Multiple contracts that operate in the same transaction can call
+     * a singleton of this contract. The stored values are later used during checkpoint
+     * execution.
+     * @param attestation The set of fields that correspond to and enable the execution of call(s)
+     * @param attestationSignature Signature of EIP-712 message
+     */
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
         if (block.timestamp > attestation.timestamp && block.timestamp - attestation.timestamp > attestation.timeout) {
             revert AttestationTimedOut();
@@ -53,7 +83,9 @@ contract SecurityValidator is EIP712 {
         bytes32 structHash = hashAttestation(attestation);
         address attester = ECDSA.recover(structHash, attestationSignature);
 
-        // Initialize and empty transient storage.
+
+
+        /// Initialize and empty transient storage.
         uint256 hashCount = attestation.executionHashes.length;
         assembly {
             tstore(ATTESTER_SLOT, attester)
@@ -63,7 +95,7 @@ contract SecurityValidator is EIP712 {
             tstore(HASH_CACHE_INDEX_SLOT, 0)
         }
 
-        // Store all execution hashes.
+        /// Store all execution hashes.
         for (uint256 i = 0; i < attestation.executionHashes.length; i++) {
             bytes32 execHash = attestation.executionHashes[i];
             uint256 currIndex = HASH_CACHE_START_SLOT + i;
@@ -73,6 +105,7 @@ contract SecurityValidator is EIP712 {
         }
     }
 
+    /// @notice Returns the attester address which attested to the current execution
     function getCurrentAttester() public view returns (address) {
         address attester;
         assembly {
@@ -81,6 +114,10 @@ contract SecurityValidator is EIP712 {
         return attester;
     }
 
+    /**
+     * @notice Produces the EIP-712 hash of the attestation message.
+     * @param attestation The set of fields that correspond to and enable the execution of call(s)
+     */
     function hashAttestation(Attestation calldata attestation) public view returns (bytes32) {
         return _hashTypedDataV4(
             keccak256(
@@ -94,6 +131,7 @@ contract SecurityValidator is EIP712 {
         );
     }
 
+    /// @notice Assists in keeping track of the depth of the calls during checkpoint execution
     function enterCall() public returns (uint256 depth) {
         assembly {
             depth := tload(DEPTH_SLOT)
@@ -105,6 +143,7 @@ contract SecurityValidator is EIP712 {
         return depth;
     }
 
+    /// @notice Assists in keeping track of the depth of the calls during checkpoint execution
     function exitCall() public {
         uint256 depth;
         assembly {
@@ -116,14 +155,22 @@ contract SecurityValidator is EIP712 {
         }
     }
 
+    /**
+     * @notice Computes an execution hash by using given arbitrary checkpoint hash, msg.sender
+     * and the previous execution hash. Requires the computed execution hash to be equal to
+     * the currently pointed execution hash from the attestation.
+     * 
+     * @param checkpointHash An arbitrary hash which can be computed by using variety of values
+     * that occur during a call
+     */
     function executeCheckpoint(bytes32 checkpointHash) public {
         bytes32 executionHash;
         assembly {
             executionHash := tload(HASH_SLOT)
         }
 
-        // If there is no attestation and the bypass flag is not used,
-        // then the transaction should revert.
+        /// If there is no attestation and the bypass flag is not used,
+        /// then the transaction should revert.
         bool bypassed;
         if (uint160(getCurrentAttester()) == 0) {
             if (BYPASS_FLAG.code.length == 0) {
@@ -142,6 +189,7 @@ contract SecurityValidator is EIP712 {
             cacheIndex := tload(HASH_CACHE_INDEX_SLOT)
             hashCount := tload(HASH_COUNT_SLOT)
         }
+        /// Current execution should not try to execute more checkpoints than attested to.
         if (!bypassed && cacheIndex >= hashCount) {
             revert HashCountExceeded(cacheIndex);
         }
@@ -151,17 +199,27 @@ contract SecurityValidator is EIP712 {
         assembly {
             cachedHash := tload(cachedHashSlot)
         }
+        /// Computed hash should match with the hash that was attested to.
         if (!bypassed && executionHash != cachedHash) {
             revert InvalidExecutionHash(address(this), cachedHash, executionHash);
         }
-        cacheIndex++;
 
+        /// Point to the next hash from the attestation and store the latest computed
+        /// hash along with the new index.
+        cacheIndex++;
         assembly {
             tstore(HASH_SLOT, executionHash)
             tstore(HASH_CACHE_INDEX_SLOT, cacheIndex)
         }
     }
 
+    /**
+     * @notice Computes the execution hash from given inputs.
+     * @param checkpointHash An arbitrary hash which can be computed by using variety of values
+     * that occur during a call
+     * @param caller msg.sender of executeCheckpoint() call
+     * @param executionHash Previous execution hash
+     */
     function executionHashFrom(bytes32 checkpointHash, address caller, bytes32 executionHash)
         public
         pure
