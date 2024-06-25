@@ -52,7 +52,9 @@ abstract contract Attestable {
             bytes32 callHash = keccak256(abi.encode(msg.sender, msg.data));
             policyContract.executeCheckpoint(checkpointId, callHash, referenceAmount, thresholdType);
         } else {
-            policyContract.executeCheckpoint(checkpointId, bytes32(uint256(uint160(msg.sender))), referenceAmount, thresholdType);
+            policyContract.executeCheckpoint(
+                checkpointId, bytes32(uint256(uint160(msg.sender))), referenceAmount, thresholdType
+            );
         }
     }
 

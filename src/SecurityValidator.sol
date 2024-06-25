@@ -6,18 +6,18 @@ import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
 address constant BYPASS_FLAG = 0x0000000000000000000000000000000000f01274; // "forta" in leetspeak
- 
+
 /// @notice Set of values that enable execution of call(s)
-struct Attestation { 
+struct Attestation {
     /// @notice Creation UNIX timestamp
-    uint256 timestamp; 
-    /** 
+    uint256 timestamp;
+    /**
      * @notice The amount of seconds until this attestation becomes invalid
      * Expiry is preferred over non-replayability due to expiry being a
      * sufficiently safe mechanism and not requiring persistent storage reads/writes.
      */
     uint256 timeout;
-    /** 
+    /**
      * @notice Ordered hashes which should be produced at every checkpoint execution
      * in this contract. An attester uses these hashes to enable a specific execution
      * path.
@@ -51,8 +51,8 @@ contract SecurityValidator is EIP712 {
 
     /**
      * @notice Transient storage slots used for storing the attestation values
-     * and executing checkpoints 
-     */ 
+     * and executing checkpoints
+     */
     uint256 constant ATTESTER_SLOT = 0;
     uint256 constant DEPTH_SLOT = 1;
     uint256 constant HASH_SLOT = 2;
@@ -61,9 +61,8 @@ contract SecurityValidator is EIP712 {
     uint256 constant HASH_CACHE_START_SLOT = 5;
 
     /// @notice Used for EIP-712 message hash calculation
-    bytes32 private constant _ATTESTATION_TYPEHASH = keccak256(
-        "Attestation(uint256 timestamp,uint256 timeout,bytes32[] executionHashes)"
-    );
+    bytes32 private constant _ATTESTATION_TYPEHASH =
+        keccak256("Attestation(uint256 timestamp,uint256 timeout,bytes32[] executionHashes)");
 
     constructor() EIP712("SecurityValidator", "1") {}
 
@@ -82,8 +81,6 @@ contract SecurityValidator is EIP712 {
 
         bytes32 structHash = hashAttestation(attestation);
         address attester = ECDSA.recover(structHash, attestationSignature);
-
-
 
         /// Initialize and empty transient storage.
         uint256 hashCount = attestation.executionHashes.length;
@@ -159,7 +156,7 @@ contract SecurityValidator is EIP712 {
      * @notice Computes an execution hash by using given arbitrary checkpoint hash, msg.sender
      * and the previous execution hash. Requires the computed execution hash to be equal to
      * the currently pointed execution hash from the attestation.
-     * 
+     *
      * @param checkpointHash An arbitrary hash which can be computed by using variety of values
      * that occur during a call
      */

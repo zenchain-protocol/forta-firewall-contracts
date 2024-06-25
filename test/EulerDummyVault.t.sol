@@ -58,7 +58,7 @@ contract EulerDummyVaultTest is Test {
         bytes32 callHash2 = keccak256(abi.encode(address(evc), call2));
         bytes32 checkpointHash2 = policy.checkpointHashOf(DoSecondCheckpoint, callHash2, address(vault));
         executionHash2 = validator.executionHashFrom(checkpointHash2, caller, executionHash1);
-        
+
         attestation.executionHashes = new bytes32[](2);
         attestation.executionHashes[0] = executionHash1;
         attestation.executionHashes[1] = executionHash2;
@@ -169,10 +169,7 @@ contract EulerDummyVaultTest is Test {
         bytes32 computedHash = 0x717422506f33fe9a54df6f78e07e37b48c4f1bdc0616c68107571d74488a5a01;
         vm.expectRevert(
             abi.encodeWithSelector(
-                SecurityValidator.InvalidExecutionHash.selector,
-                address(validator),
-                expectedHash,
-                computedHash
+                SecurityValidator.InvalidExecutionHash.selector, address(validator), expectedHash, computedHash
             )
         );
         evc.batch(batch);
