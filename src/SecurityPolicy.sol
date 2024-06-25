@@ -99,9 +99,10 @@ contract SecurityPolicy {
             revert InvalidThresholdType();
         }
 
+        bytes32 slot = keccak256(abi.encode(checkpointId, msg.sender));
         uint256 acc;
         assembly {
-            acc := tload(checkpointHash)
+            acc := tload(slot)
         }
         acc += referenceAmount;
         if (acc > threshold) {
@@ -110,7 +111,7 @@ contract SecurityPolicy {
         }
         assembly {
             /// accumulate for the next time
-            tstore(checkpointHash, acc)
+            tstore(slot, acc)
         }
     }
 
