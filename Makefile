@@ -5,3 +5,8 @@ deploy:
 .PHONY: gas
 gas:
 	forge test --match-test attestationGas -vvvv
+
+.PHONY: proxy-gas
+proxy-gas:
+	forge test --match-test testProxyGasChained --gas-report
+	forge test --match-test testProxyGasDirect --gas-report

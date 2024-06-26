@@ -21,6 +21,7 @@ interface ISecurityProxy {
 contract SecurityProxy is Proxy {
     /// keccak256("forta.proxy") - 1
     /// Skipping the part of storage that could likely create collision in the original proxy.
+    /// TODO: Instead, use namespaced storage slot for a struct that holds all storage.
     uint256[0xb194c6016d78b6a952fbefc94316b0e8122b922095a36f35409d2767c3612b32] private __gap;
 
     mapping(bytes4 => uint256) thresholds;
@@ -34,9 +35,12 @@ contract SecurityProxy is Proxy {
     }
 
     function _fallback() internal override {
-        /// TODO: Check here thresholds and execute checkpoint before falling back
-        /// to the logic contract!!! That helps having automatic checkpoints for
-        /// any function in the logic contract.
+        uint256 threshold = thresholds[msg.sig];
+        if (threshold > 1) {
+            /// TODO: Check here thresholds and execute checkpoint before falling back
+            /// to the logic contract!!! That helps having automatic checkpoints for
+            /// any function in the logic contract.
+        }
         super._fallback();
     }
 

@@ -27,6 +27,8 @@ contract ProxyChainingTest is Test {
     SecurityProxy securityProxy;
     LogicContract logic;
 
+    ERC1967Proxy altProxy;
+
     function setUp() public {
         logic = new LogicContract();
 
@@ -38,6 +40,9 @@ contract ProxyChainingTest is Test {
 
         /// Security proxy points to the logic contract but that should be on main proxy storage.
         ISecurityProxy(address(mainProxy)).setImplementation(address(logic));
+
+        /// Define an alternative main proxy that directly integrates with the logic contract.
+        altProxy = new ERC1967Proxy(address(logic), data);
     }
 
     function testStorageWrite() public {
@@ -72,5 +77,13 @@ contract ProxyChainingTest is Test {
         /// Then, whenever we treat main proxy as any other contract in the chain,
         /// it works because of the fallback mechanism. Every function on the chain
         /// works only on the storage of the main proxy.
+    }
+
+    function testProxyGasChained() public {
+        ILogicContract(address(mainProxy)).setNumber(234);
+    }
+
+    function testProxyGasDirect() public {
+        ILogicContract(address(altProxy)).setNumber(234);
     }
 }
