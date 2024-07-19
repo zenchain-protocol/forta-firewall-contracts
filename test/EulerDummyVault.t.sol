@@ -180,22 +180,9 @@ contract EulerDummyVaultTest is Test {
         _signAttestation();
 
         vm.startPrank(address(evc), user);
-
-        uint256 startGasLeft = gasleft();
-
         validator.saveAttestation(attestation, attestationSignature);
-        uint256 saveAttGasLeft = gasleft();
-
         vault.doFirst(123);
-        uint256 doFirstGasLeft = gasleft();
-
         vault.doSecond(456);
-        uint256 doSecondGasLeft = gasleft();
-
-        console.log("saveAttestation():", startGasLeft - saveAttGasLeft);
-        console.log("doFirst(123):", saveAttGasLeft - doFirstGasLeft);
-        console.log("doSecond(456):", doFirstGasLeft - doSecondGasLeft);
-        console.log("total:", startGasLeft - doSecondGasLeft);
 
         vm.stopPrank();
     }

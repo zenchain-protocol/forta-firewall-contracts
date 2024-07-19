@@ -4,4 +4,4 @@ deploy:
 
 .PHONY: gas
 gas:
-	forge test --match-test attestationGas -vvv
+	forge test --match-test attestationGas -vvvv
