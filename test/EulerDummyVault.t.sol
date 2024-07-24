@@ -42,7 +42,7 @@ contract EulerDummyVaultTest is Test {
         vault = new DummyVault(ISecurityPolicy(address(policy)));
 
         /// very large - in seconds
-        attestation.timeout = 1000000000;
+        attestation.deadline = 1000000000;
 
         _computeAttestationHashes(address(policy));
         _signAttestation();

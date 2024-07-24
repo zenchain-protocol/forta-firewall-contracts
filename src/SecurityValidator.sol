@@ -9,14 +9,8 @@ address constant BYPASS_FLAG = 0x0000000000000000000000000000000000f01274; // "f
 
 /// @notice Set of values that enable execution of call(s)
 struct Attestation {
-    /// @notice Creation UNIX timestamp
-    uint256 timestamp;
-    /**
-     * @notice The amount of seconds until this attestation becomes invalid
-     * Expiry is preferred over non-replayability due to expiry being a
-     * sufficiently safe mechanism and not requiring persistent storage reads/writes.
-     */
-    uint256 timeout;
+    /// @notice Deadline UNIX timestamp
+    uint256 deadline;
     /**
      * @notice Ordered hashes which should be produced at every checkpoint execution
      * in this contract. An attester uses these hashes to enable a specific execution
@@ -42,7 +36,7 @@ interface ISecurityValidator {
  * that execution was enabled by an attester.
  */
 contract SecurityValidator is EIP712 {
-    error AttestationTimedOut();
+    error AttestationDeadlineExceeded();
     error AttestationRequired();
     error HashCountExceeded(uint256 atIndex);
     error InvalidExecutionHash(address validator, bytes32 expectedHash, bytes32 computedHash);
@@ -62,7 +56,7 @@ contract SecurityValidator is EIP712 {
 
     /// @notice Used for EIP-712 message hash calculation
     bytes32 private constant _ATTESTATION_TYPEHASH =
-        keccak256("Attestation(uint256 timestamp,uint256 timeout,bytes32[] executionHashes)");
+        keccak256("Attestation(uint256 deadline,bytes32[] executionHashes)");
 
     constructor() EIP712("SecurityValidator", "1") {}
 
@@ -75,8 +69,8 @@ contract SecurityValidator is EIP712 {
      * @param attestationSignature Signature of EIP-712 message
      */
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
-        if (block.timestamp > attestation.timestamp && block.timestamp - attestation.timestamp > attestation.timeout) {
-            revert AttestationTimedOut();
+        if (block.timestamp > attestation.deadline) {
+            revert AttestationDeadlineExceeded();
         }
 
         bytes32 structHash = hashAttestation(attestation);
@@ -120,8 +114,7 @@ contract SecurityValidator is EIP712 {
             keccak256(
                 abi.encode(
                     _ATTESTATION_TYPEHASH,
-                    attestation.timestamp,
-                    attestation.timeout,
+                    attestation.deadline,
                     keccak256(abi.encodePacked(attestation.executionHashes))
                 )
             )
