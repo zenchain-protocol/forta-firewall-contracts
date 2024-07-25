@@ -40,6 +40,7 @@ contract SecurityValidator is EIP712 {
     error AttestationRequired();
     error HashCountExceeded(uint256 atIndex);
     error InvalidExecutionHash(address validator, bytes32 expectedHash, bytes32 computedHash);
+    error InvalidAttestation();
 
     event CheckpointExecuted(address validator, bytes32 executionHash);
 
@@ -72,6 +73,10 @@ contract SecurityValidator is EIP712 {
         if (block.timestamp > attestation.deadline) {
             revert AttestationDeadlineExceeded();
         }
+
+        // Avoid reentrancy: Make sure that we are starting from a zero state or after
+        // a previous attestation has beenUsed.
+        _idleOrDone();
 
         bytes32 structHash = hashAttestation(attestation);
         address attester = ECDSA.recover(structHash, attestationSignature);
@@ -200,6 +205,26 @@ contract SecurityValidator is EIP712 {
         assembly {
             tstore(HASH_SLOT, executionHash)
             tstore(HASH_CACHE_INDEX_SLOT, cacheIndex)
+        }
+    }
+
+    /**
+     * @notice Makes sure that the attestation matches with current transaction
+     * and all checkpoints were used correctly.
+     */
+    function validateFinalState() public view {
+        _idleOrDone();
+    }
+
+    function _idleOrDone() internal view {
+        uint256 cacheIndex;
+        uint256 hashCount;
+        assembly {
+            cacheIndex := tload(HASH_CACHE_INDEX_SLOT)
+            hashCount := tload(HASH_COUNT_SLOT)
+        }
+        if (cacheIndex < hashCount) {
+            revert InvalidAttestation();
         }
     }
 
