@@ -46,6 +46,8 @@ contract ProxyChainingTest is Test {
     }
 
     function testStorageWrite() public {
+        vm.startStateDiffRecording();
+
         /// Let's change the threshold of the security proxy but on main proxy storage.
         /// That should work because the implementation of main proxy is the security proxy.
         /// So we can treat main proxy as if it's the security proxy.
@@ -64,12 +66,43 @@ contract ProxyChainingTest is Test {
         /// and use main proxy storage.
         ILogicContract(address(mainProxy)).setNumber(234);
 
+        /// Verify that only main proxy storage changes with expected values.
+        Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
+        uint256 valueIndex;
+        for (uint256 i = 0; i < accesses.length; i++) {
+            Vm.AccountAccess memory access = accesses[i];
+            console.log("access", i);
+            for (uint256 j = 0; j < access.storageAccesses.length; j++) {
+                Vm.StorageAccess memory storageAcc = access.storageAccesses[j];
+                if (!storageAcc.isWrite) continue;
+                // console.log("storage access", j);
+                // console.log("account", storageAcc.account);
+                // console.logBytes32(storageAcc.slot);
+                // console.logBytes32(storageAcc.newValue);
+                assertEq(address(mainProxy), storageAcc.account);
+                if (valueIndex == 0) {
+                    assertEq(uint256(123), uint256(storageAcc.newValue));
+                    valueIndex++;
+                    continue;
+                }
+                if (valueIndex == 1) {
+                    assertEq(uint256(234), uint256(storageAcc.newValue));
+                    valueIndex++;
+                }
+            }
+        }
+
         /// Validate the number.
         uint256 knownNumber = ILogicContract(address(mainProxy)).getNumber();
         assertEq(234, knownNumber);
 
         /// The actual logic contract should give zero.
         knownNumber = logic.getNumber();
+        assertEq(0, knownNumber);
+
+        /// The security proxy should also give zero.
+        securityProxy.setImplementation(address(logic));
+        knownNumber = ILogicContract(address(securityProxy)).getNumber();
         assertEq(0, knownNumber);
 
         /// Success!!
