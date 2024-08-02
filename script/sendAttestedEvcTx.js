@@ -56,12 +56,7 @@ const validatorAbi = [
         "internalType": "struct Attestation",
         "components": [
           {
-            "name": "timestamp",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "timeout",
+            "name": "deadline",
             "type": "uint256",
             "internalType": "uint256"
           },
@@ -92,12 +87,7 @@ const validatorAbi = [
         "internalType": "struct Attestation",
         "components": [
           {
-            "name": "timestamp",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "timeout",
+            "name": "deadline",
             "type": "uint256",
             "internalType": "uint256"
           },
@@ -170,12 +160,17 @@ const originalBatch = [
 ];
 const originalCall = evcContract.interface.encodeFunctionData("batch", [originalBatch]);
 
-
-// TODO: Try doing an eth_call with the original call to see if it really reverts and
-// with what error. The error message will be helpful in determining whether
-// an attestation needs to be requested or not.
-
 async function main() {
+  try {
+    await signer.call({
+      to: evcAddr,
+      data: originalCall,
+      gasLimit: 200000
+    });
+  } catch (err) {
+    console.log(`tx really fails without the attestation: ${err}`);
+  }
+
   const result = await axios.post(attesterUrl,
     {
       from: userAddr,
@@ -183,6 +178,7 @@ async function main() {
       input: originalCall,
       
       // Integration testing params:
+      disableScreening: true,
       jsonRpcUrl,
     }
   );
@@ -207,6 +203,13 @@ async function main() {
   ].concat(originalBatch);
 
   const finalCall = evcContract.interface.encodeFunctionData("batch", [finalBatch]);
+
+  await signer.call({
+    to: evcAddr,
+    data: finalCall,
+    gasLimit: 200000
+  });
+  console.log('tx succeeds with the attestation! no eth_call failure.');
 
   const txResult = await signer.sendTransaction({
     to: evcAddr,
