@@ -2,9 +2,11 @@
 pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts/proxy/Proxy.sol";
+import {ISecurityValidator} from "./SecurityValidator.sol";
 
 interface ISecurityProxy {
-    function setImplementation(address newImplementation) external;
+    function setNextImplementation(address newImplementation) external;
+    function setSecurityValidator(ISecurityValidator _validator) external;
     function setCheckpointThreshold(string memory funcSig, uint256 threshold) external;
     function getCheckpointThreshold(string memory funcSig) external view returns (uint256);
 }
@@ -29,34 +31,64 @@ contract SecurityProxy is Proxy {
     /// @notice The actual fallback logic address that executes business logic.
     address implementation;
 
+    /// @notice The validator contract that takes the checkpoint execution call.
+    ISecurityValidator validator;
+
     /// @notice Implements the _implementation() function of the proxy.
     function _implementation() internal view override returns (address) {
         return implementation;
     }
 
     function _fallback() internal override {
-        uint256 threshold = thresholds[msg.sig];
-        if (threshold > 1) {
-            /// TODO: Check here thresholds and execute checkpoint before falling back
-            /// to the logic contract!!! That helps having automatic checkpoints for
-            /// any function in the logic contract.
+        (uint256 ref, bool ok) = thresholdActivated();
+        if (ok) {
+            validator.executeCheckpoint(keccak256(abi.encode(msg.sender, address(this), msg.sig, ref)));
         }
         super._fallback();
     }
 
     /// TODO: Use the access control library.
-    function setImplementation(address newImplementation) public {
+    function setNextImplementation(address newImplementation) public {
         implementation = newImplementation;
     }
 
     /// TODO: Use the access control library.
+    function setSecurityValidator(ISecurityValidator _validator) public {
+        validator = _validator;
+    }
+
+    /// TODO: Use the access control library.
     function setCheckpointThreshold(string memory funcSig, uint256 threshold) public {
-        thresholds[bytes4(keccak256(abi.encode(funcSig)))] = threshold;
+        thresholds[bytes4(keccak256(bytes(funcSig)))] = threshold;
     }
 
     /// TODO: Use the access control library.
     function getCheckpointThreshold(string memory funcSig) public view returns (uint256) {
-        return thresholds[bytes4(keccak256(abi.encode(funcSig)))];
+        return thresholds[bytes4(keccak256(bytes(funcSig)))];
+    }
+
+    /// TODO: This should be able to read other arguments.
+    function thresholdActivated() internal view returns (uint256, bool) {
+        uint256 threshold = thresholds[msg.sig];
+        /// TODO: Get byte range start and end from threshold value.
+        if (threshold == 0) {
+            return (0, false);
+        }
+        if (threshold == 1) {
+            return (1, true);
+        }
+        /// TODO: Use the byte range here.
+        bytes calldata byteRange = msg.data[4:36];
+        uint256 ref = uint256(bytes32(byteRange));
+        if (ref < threshold) {
+            return (0, false);
+        }
+        return (scaleDownRef(ref), true);
+    }
+
+    /// TODO: Use log1.01 here or similar.
+    function scaleDownRef(uint256 ref) internal pure returns (uint256) {
+        return ref;
     }
 
     receive() external payable {}

@@ -2,7 +2,8 @@
 pragma solidity ^0.8.25;
 
 import {Test, console, Vm} from "forge-std/Test.sol";
-import "../src/proxy/SecurityProxy.sol";
+import "../src/SecurityProxy.sol";
+import {ISecurityValidator, SecurityValidator, BYPASS_FLAG} from "../src/SecurityValidator.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 interface ILogicContract {
@@ -39,7 +40,12 @@ contract ProxyChainingTest is Test {
         mainProxy = new ERC1967Proxy(address(securityProxy), data);
 
         /// Security proxy points to the logic contract but that should be on main proxy storage.
-        ISecurityProxy(address(mainProxy)).setImplementation(address(logic));
+        ISecurityProxy(address(mainProxy)).setNextImplementation(address(logic));
+        ISecurityProxy(address(mainProxy)).setSecurityValidator(ISecurityValidator(address(new SecurityValidator())));
+        vm.etch(BYPASS_FLAG, bytes("1"));
+
+        /// Keep a default threshold for every test.
+        ISecurityProxy(address(mainProxy)).setCheckpointThreshold("setNumber(uint256)", 123);
 
         /// Define an alternative main proxy that directly integrates with the logic contract.
         altProxy = new ERC1967Proxy(address(logic), data);
@@ -71,7 +77,7 @@ contract ProxyChainingTest is Test {
         uint256 valueIndex;
         for (uint256 i = 0; i < accesses.length; i++) {
             Vm.AccountAccess memory access = accesses[i];
-            console.log("access", i);
+            // console.log("access", i);
             for (uint256 j = 0; j < access.storageAccesses.length; j++) {
                 Vm.StorageAccess memory storageAcc = access.storageAccesses[j];
                 if (!storageAcc.isWrite) continue;
@@ -101,7 +107,7 @@ contract ProxyChainingTest is Test {
         assertEq(0, knownNumber);
 
         /// The security proxy should also give zero.
-        securityProxy.setImplementation(address(logic));
+        securityProxy.setNextImplementation(address(logic));
         knownNumber = ILogicContract(address(securityProxy)).getNumber();
         assertEq(0, knownNumber);
 
@@ -112,8 +118,12 @@ contract ProxyChainingTest is Test {
         /// works only on the storage of the main proxy.
     }
 
-    function testProxyGasChained() public {
+    function testProxyGasChainedActive() public {
         ILogicContract(address(mainProxy)).setNumber(234);
+    }
+
+    function testProxyGasChainedPassive() public {
+        ILogicContract(address(mainProxy)).setNumber(10);
     }
 
     function testProxyGasDirect() public {
