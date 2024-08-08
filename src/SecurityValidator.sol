@@ -4,6 +4,7 @@ pragma solidity ^0.8.25;
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 
 address constant BYPASS_FLAG = 0x0000000000000000000000000000000000f01274; // "forta" in leetspeak
 
@@ -19,10 +20,19 @@ struct Attestation {
     bytes32[] executionHashes;
 }
 
+/// @notice Attestation data wrapped for storing.
+struct StoredAttestation {
+    /// @notice Wrapped attestation.
+    Attestation attestation;
+    /// @notice The attester which signed above attestation.
+    address attester;
+}
+
 interface ISecurityValidator {
     function hashAttestation(Attestation calldata attestation) external view returns (bytes32);
     function getCurrentAttester() external view returns (address);
 
+    function storeAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
 
     function enterCall() external returns (uint256 depth);
@@ -36,6 +46,9 @@ interface ISecurityValidator {
  * that execution was enabled by an attester.
  */
 contract SecurityValidator is EIP712 {
+    using StorageSlot for bytes32;
+
+    error AttestationOverwrite();
     error AttestationDeadlineExceeded();
     error AttestationRequired();
     error HashCountExceeded(uint256 atIndex);
@@ -59,7 +72,32 @@ contract SecurityValidator is EIP712 {
     bytes32 private constant _ATTESTATION_TYPEHASH =
         keccak256("Attestation(uint256 deadline,bytes32[] executionHashes)");
 
+    /**
+     * @notice A mapping from first execution hashes to attestations.
+     * This is useful for storing an attestation in a previous transaction.
+     */
+    mapping(bytes32 => StoredAttestation) attestations;
+
     constructor() EIP712("SecurityValidator", "1") {}
+
+    /**
+     * @notice An alternative that uses persistent storage instead of transient.
+     * This function defers unpacking of an attestation to the transient storage.
+     * @param attestation The set of fields that correspond to and enable the execution of call(s)
+     * @param attestationSignature Signature of EIP-712 message
+     */
+    function storeAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
+        bytes32 firstExecHash = attestation.executionHashes[0];
+        StoredAttestation storage storedAttestation = attestations[firstExecHash];
+        if (storedAttestation.attestation.deadline > block.timestamp) {
+            revert AttestationOverwrite();
+        }
+        storedAttestation.attestation = attestation;
+        bytes32 structHash = hashAttestation(attestation);
+        address attester = ECDSA.recover(structHash, attestationSignature);
+        storedAttestation.attester = attester;
+        attestations[firstExecHash] = storedAttestation;
+    }
 
     /**
      * @notice Accepts and stores an attestation to the transient storage introduced
@@ -70,35 +108,14 @@ contract SecurityValidator is EIP712 {
      * @param attestationSignature Signature of EIP-712 message
      */
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
-        if (block.timestamp > attestation.deadline) {
-            revert AttestationDeadlineExceeded();
-        }
-
-        // Avoid reentrancy: Make sure that we are starting from a zero state or after
-        // a previous attestation has beenUsed.
-        _idleOrDone();
-
         bytes32 structHash = hashAttestation(attestation);
         address attester = ECDSA.recover(structHash, attestationSignature);
 
-        /// Initialize and empty transient storage.
-        uint256 hashCount = attestation.executionHashes.length;
-        assembly {
-            tstore(ATTESTER_SLOT, attester)
-            tstore(DEPTH_SLOT, 0)
-            tstore(HASH_SLOT, 0)
-            tstore(HASH_COUNT_SLOT, hashCount)
-            tstore(HASH_CACHE_INDEX_SLOT, 0)
-        }
+        // Avoid reentrancy: Make sure that we are starting from a zero state or after
+        // a previous attestation has been used.
+        _requireIdleOrDone();
 
-        /// Store all execution hashes.
-        for (uint256 i = 0; i < attestation.executionHashes.length; i++) {
-            bytes32 execHash = attestation.executionHashes[i];
-            uint256 currIndex = HASH_CACHE_START_SLOT + i;
-            assembly {
-                tstore(currIndex, execHash)
-            }
-        }
+        _initAttestation(attestation, attester);
     }
 
     /// @notice Returns the attester address which attested to the current execution
@@ -178,6 +195,12 @@ contract SecurityValidator is EIP712 {
         executionHash = executionHashFrom(checkpointHash, msg.sender, executionHash);
         emit CheckpointExecuted(address(this), executionHash);
 
+        if (!bypassed) {
+            /// In case the attestation was delivered in a previous transaction, it should
+            /// be loaded from here.
+            _tryInitAttestationFromStorage(executionHash);
+        }
+
         uint256 cacheIndex;
         uint256 hashCount;
         assembly {
@@ -216,16 +239,53 @@ contract SecurityValidator is EIP712 {
         _idleOrDone();
     }
 
-    function _idleOrDone() internal view {
+    function _initAttestation(Attestation memory attestation, address attester) internal {
+        if (block.timestamp > attestation.deadline) {
+            revert AttestationDeadlineExceeded();
+        }
+
+        /// Initialize and empty transient storage.
+        uint256 hashCount = attestation.executionHashes.length;
+        assembly {
+            tstore(ATTESTER_SLOT, attester)
+            tstore(DEPTH_SLOT, 0)
+            tstore(HASH_SLOT, 0)
+            tstore(HASH_COUNT_SLOT, hashCount)
+            tstore(HASH_CACHE_INDEX_SLOT, 0)
+        }
+
+        /// Store all execution hashes.
+        for (uint256 i = 0; i < attestation.executionHashes.length; i++) {
+            bytes32 execHash = attestation.executionHashes[i];
+            uint256 currIndex = HASH_CACHE_START_SLOT + i;
+            assembly {
+                tstore(currIndex, execHash)
+            }
+        }
+    }
+
+    function _tryInitAttestationFromStorage(bytes32 executionHash) internal {
+        // Avoid reentrancy or double init: Make sure that we are starting from a
+        // zero state or after a previous attestation has been used.
+        if (!_idleOrDone()) return;
+
+        StoredAttestation storage storedAttestation = attestations[executionHash];
+        _initAttestation(storedAttestation.attestation, storedAttestation.attester);
+        delete(attestations[executionHash]);
+    }
+
+    function _idleOrDone() internal view returns (bool) {
         uint256 cacheIndex;
         uint256 hashCount;
         assembly {
             cacheIndex := tload(HASH_CACHE_INDEX_SLOT)
             hashCount := tload(HASH_COUNT_SLOT)
         }
-        if (cacheIndex < hashCount) {
-            revert InvalidAttestation();
-        }
+        return cacheIndex >= hashCount;
+    }
+
+    function _requireIdleOrDone() internal view {
+        if (!_idleOrDone()) revert InvalidAttestation();
     }
 
     /**
