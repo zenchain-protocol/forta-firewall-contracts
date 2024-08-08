@@ -26,7 +26,6 @@ abstract contract Attestable {
     modifier checkpoint(bytes32 checkpointId, uint256 referenceAmount, Threshold thresholdType) {
         _executeCheckpoint(checkpointId, referenceAmount, thresholdType);
         _;
-        _exitCall();
     }
 
     /**
@@ -39,31 +38,8 @@ abstract contract Attestable {
      * @param thresholdType Threshold type of the checkpoint.
      */
     function _executeCheckpoint(bytes32 checkpointId, uint256 referenceAmount, Threshold thresholdType) internal {
-        /// Outermost calls need to rely on sender and call data during hash generation
-        /// for checkpoint execution. This is needed for making the attestations specific to the
-        /// outermost user calls that initiate the chain of calls down the call stack.
-        ///
-        /// For deeper calls, using call data can make attestations fragile since the arguments
-        /// that are passed to intermediary calls can change depending on chain state. This is
-        /// not the same for outer calls which depend on the exact kind of intents the user wants
-        /// to execute.
-        uint256 depth = policyContract.enterCall();
-        if (depth == 1) {
-            bytes32 callHash = keccak256(abi.encode(msg.sender, msg.data));
-            policyContract.executeCheckpoint(checkpointId, callHash, referenceAmount, thresholdType);
-        } else {
-            policyContract.executeCheckpoint(
-                checkpointId, bytes32(uint256(uint160(msg.sender))), referenceAmount, thresholdType
-            );
-        }
-    }
-
-    /**
-     * @notice If _executeCheckpoint() usage is preferred over the modifier, this must be called
-     * before the function returns.
-     */
-    function _exitCall() internal {
-        policyContract.exitCall();
+        bytes32 callHash = keccak256(abi.encode(msg.sender, msg.data));
+        policyContract.executeCheckpoint(checkpointId, callHash, referenceAmount, thresholdType);
     }
 
     /**

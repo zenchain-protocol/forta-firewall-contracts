@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.25;
 
+import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import "./SecurityValidator.sol";
 
 enum Threshold {
@@ -10,10 +11,8 @@ enum Threshold {
 
 interface ISecurityPolicy {
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
-    function enterCall() external returns (uint256 depth);
     function executeCheckpoint(bytes32 checkpointId, bytes32 callHash, uint256 referenceAmount, Threshold thresholdType)
         external;
-    function exitCall() external;
 }
 
 /**
@@ -25,6 +24,8 @@ interface ISecurityPolicy {
  * to be executed by the logic contract code.
  */
 contract SecurityPolicy {
+    using StorageSlot for bytes32;
+
     error UntrustedAttester();
     error InvalidThresholdType();
 
@@ -53,16 +54,6 @@ contract SecurityPolicy {
     /// @notice Proxies the call to the validator contract
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
         trustedValidator.saveAttestation(attestation, attestationSignature);
-    }
-
-    /// @notice Proxies the call to the validator contract
-    function enterCall() public returns (uint256 depth) {
-        return trustedValidator.enterCall();
-    }
-
-    /// @notice Proxies the call to the validator contract
-    function exitCall() public {
-        trustedValidator.exitCall();
     }
 
     /**
@@ -100,19 +91,13 @@ contract SecurityPolicy {
         }
 
         bytes32 slot = keccak256(abi.encode(checkpointId, msg.sender));
-        uint256 acc;
-        assembly {
-            acc := tload(slot)
-        }
+        uint256 acc = StorageSlot.tload(slot.asUint256());
         acc += referenceAmount;
         if (acc > threshold) {
             trustedValidator.executeCheckpoint(checkpointHash);
             return;
         }
-        assembly {
-            /// accumulate for the next time
-            tstore(slot, acc)
-        }
+        StorageSlot.tstore(slot.asUint256(), acc);
     }
 
     /**

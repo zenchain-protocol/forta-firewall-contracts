@@ -35,9 +35,7 @@ interface ISecurityValidator {
     function storeAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
 
-    function enterCall() external returns (uint256 depth);
     function executeCheckpoint(bytes32 checkpointHash) external;
-    function exitCall() external;
 }
 
 /**
@@ -61,12 +59,11 @@ contract SecurityValidator is EIP712 {
      * @notice Transient storage slots used for storing the attestation values
      * and executing checkpoints
      */
-    uint256 constant ATTESTER_SLOT = 0;
-    uint256 constant DEPTH_SLOT = 1;
-    uint256 constant HASH_SLOT = 2;
-    uint256 constant HASH_COUNT_SLOT = 3;
-    uint256 constant HASH_CACHE_INDEX_SLOT = 4;
-    uint256 constant HASH_CACHE_START_SLOT = 5;
+    bytes32 constant ATTESTER_SLOT = bytes32(uint256(0));
+    bytes32 constant HASH_SLOT = bytes32(uint256(1));
+    bytes32 constant HASH_COUNT_SLOT = bytes32(uint256(2));
+    bytes32 constant HASH_CACHE_INDEX_SLOT = bytes32(uint256(3));
+    uint256 constant HASH_CACHE_START_SLOT = 4;
 
     /// @notice Used for EIP-712 message hash calculation
     bytes32 private constant _ATTESTATION_TYPEHASH =
@@ -120,11 +117,7 @@ contract SecurityValidator is EIP712 {
 
     /// @notice Returns the attester address which attested to the current execution
     function getCurrentAttester() public view returns (address) {
-        address attester;
-        assembly {
-            attester := tload(ATTESTER_SLOT)
-        }
-        return attester;
+        return StorageSlot.tload(ATTESTER_SLOT.asAddress());
     }
 
     /**
@@ -143,30 +136,6 @@ contract SecurityValidator is EIP712 {
         );
     }
 
-    /// @notice Assists in keeping track of the depth of the calls during checkpoint execution
-    function enterCall() public returns (uint256 depth) {
-        assembly {
-            depth := tload(DEPTH_SLOT)
-        }
-        depth++;
-        assembly {
-            tstore(DEPTH_SLOT, depth)
-        }
-        return depth;
-    }
-
-    /// @notice Assists in keeping track of the depth of the calls during checkpoint execution
-    function exitCall() public {
-        uint256 depth;
-        assembly {
-            depth := tload(DEPTH_SLOT)
-        }
-        depth--;
-        assembly {
-            tstore(DEPTH_SLOT, depth)
-        }
-    }
-
     /**
      * @notice Computes an execution hash by using given arbitrary checkpoint hash, msg.sender
      * and the previous execution hash. Requires the computed execution hash to be equal to
@@ -176,10 +145,7 @@ contract SecurityValidator is EIP712 {
      * that occur during a call
      */
     function executeCheckpoint(bytes32 checkpointHash) public {
-        bytes32 executionHash;
-        assembly {
-            executionHash := tload(HASH_SLOT)
-        }
+        bytes32 executionHash = StorageSlot.tload(HASH_SLOT.asBytes32());
 
         /// If there is no attestation and the bypass flag is not used,
         /// then the transaction should revert.
@@ -201,22 +167,15 @@ contract SecurityValidator is EIP712 {
             _tryInitAttestationFromStorage(executionHash);
         }
 
-        uint256 cacheIndex;
-        uint256 hashCount;
-        assembly {
-            cacheIndex := tload(HASH_CACHE_INDEX_SLOT)
-            hashCount := tload(HASH_COUNT_SLOT)
-        }
+        uint256 cacheIndex = StorageSlot.tload(HASH_CACHE_INDEX_SLOT.asUint256());
+        uint256 hashCount = StorageSlot.tload(HASH_COUNT_SLOT.asUint256());
         /// Current execution should not try to execute more checkpoints than attested to.
         if (!bypassed && cacheIndex >= hashCount) {
             revert HashCountExceeded(cacheIndex);
         }
 
-        bytes32 cachedHash;
-        uint256 cachedHashSlot = cacheIndex + HASH_CACHE_START_SLOT;
-        assembly {
-            cachedHash := tload(cachedHashSlot)
-        }
+        bytes32 cachedHashSlot = bytes32(cacheIndex + HASH_CACHE_START_SLOT);
+        bytes32 cachedHash = StorageSlot.tload(cachedHashSlot.asBytes32());
         /// Computed hash should match with the hash that was attested to.
         if (!bypassed && executionHash != cachedHash) {
             revert InvalidExecutionHash(address(this), cachedHash, executionHash);
@@ -225,10 +184,8 @@ contract SecurityValidator is EIP712 {
         /// Point to the next hash from the attestation and store the latest computed
         /// hash along with the new index.
         cacheIndex++;
-        assembly {
-            tstore(HASH_SLOT, executionHash)
-            tstore(HASH_CACHE_INDEX_SLOT, cacheIndex)
-        }
+        StorageSlot.tstore(HASH_SLOT.asBytes32(), executionHash);
+        StorageSlot.tstore(HASH_CACHE_INDEX_SLOT.asUint256(), cacheIndex);
     }
 
     /**
@@ -246,21 +203,16 @@ contract SecurityValidator is EIP712 {
 
         /// Initialize and empty transient storage.
         uint256 hashCount = attestation.executionHashes.length;
-        assembly {
-            tstore(ATTESTER_SLOT, attester)
-            tstore(DEPTH_SLOT, 0)
-            tstore(HASH_SLOT, 0)
-            tstore(HASH_COUNT_SLOT, hashCount)
-            tstore(HASH_CACHE_INDEX_SLOT, 0)
-        }
+        StorageSlot.tstore(ATTESTER_SLOT.asAddress(), attester);
+        StorageSlot.tstore(HASH_SLOT.asBytes32(), 0);
+        StorageSlot.tstore(HASH_COUNT_SLOT.asUint256(), hashCount);
+        StorageSlot.tstore(HASH_CACHE_INDEX_SLOT.asUint256(), 0);
 
         /// Store all execution hashes.
         for (uint256 i = 0; i < attestation.executionHashes.length; i++) {
             bytes32 execHash = attestation.executionHashes[i];
-            uint256 currIndex = HASH_CACHE_START_SLOT + i;
-            assembly {
-                tstore(currIndex, execHash)
-            }
+            bytes32 currIndex = bytes32(HASH_CACHE_START_SLOT + i);
+            StorageSlot.tstore(currIndex.asBytes32(), execHash);
         }
     }
 
@@ -275,12 +227,8 @@ contract SecurityValidator is EIP712 {
     }
 
     function _idleOrDone() internal view returns (bool) {
-        uint256 cacheIndex;
-        uint256 hashCount;
-        assembly {
-            cacheIndex := tload(HASH_CACHE_INDEX_SLOT)
-            hashCount := tload(HASH_COUNT_SLOT)
-        }
+        uint256 cacheIndex = StorageSlot.tload(HASH_CACHE_INDEX_SLOT.asUint256());
+        uint256 hashCount = StorageSlot.tload(HASH_COUNT_SLOT.asUint256());
         return cacheIndex >= hashCount;
     }
 
