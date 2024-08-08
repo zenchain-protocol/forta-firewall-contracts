@@ -2,8 +2,7 @@
 pragma solidity ^0.8.25;
 
 import {Test, console, Vm} from "forge-std/Test.sol";
-import "evc/interfaces/IEthereumVaultConnector.sol";
-import "evc/EthereumVaultConnector.sol";
+import {IEVC, EthereumVaultConnector} from "evc/EthereumVaultConnector.sol";
 import "../src/euler/DummyVault.sol";
 import {ISecurityPolicy, SecurityPolicy} from "../src/SecurityPolicy.sol";
 import {Attestation, ISecurityValidator, SecurityValidator, BYPASS_FLAG} from "../src/SecurityValidator.sol";
@@ -98,6 +97,40 @@ contract EulerDummyVaultTest is Test {
         });
 
         vm.broadcast(userPrivateKey);
+        evc.batch(batch);
+    }
+
+    function test_attestedEVCBatch_twoTx() public {
+        vm.broadcast(userPrivateKey);
+        /// Store the attestation in the first transaction.
+        validator.storeAttestation(attestation, attestationSignature);
+
+        IEVC.BatchItem[] memory batch = new IEVC.BatchItem[](2);
+
+        /// Exclude the attestation from the batch.
+
+        /// Call the first vault function.
+        batch[0] = IEVC.BatchItem({
+            targetContract: address(vault),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(DummyVault.doFirst.selector, 123)
+        });
+
+        /// Call the second vault function.
+        batch[1] = IEVC.BatchItem({
+            targetContract: address(vault),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(DummyVault.doSecond.selector, 456)
+        });
+
+        /// Send the batch - it should be able to use the attestation from the first tx.
+        vm.broadcast(userPrivateKey);
+        evc.batch(batch);
+
+        /// The second try should fail as there are no attestations anymore.
+        vm.expectRevert();
         evc.batch(batch);
     }
 

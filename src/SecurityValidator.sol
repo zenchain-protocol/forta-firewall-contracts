@@ -52,6 +52,7 @@ contract SecurityValidator is EIP712 {
     error HashCountExceeded(uint256 atIndex);
     error InvalidExecutionHash(address validator, bytes32 expectedHash, bytes32 computedHash);
     error InvalidAttestation();
+    error AttestationNotFound();
 
     event CheckpointExecuted(address validator, bytes32 executionHash);
 
@@ -146,25 +147,22 @@ contract SecurityValidator is EIP712 {
      */
     function executeCheckpoint(bytes32 checkpointHash) public {
         bytes32 executionHash = StorageSlot.tload(HASH_SLOT.asBytes32());
+        executionHash = executionHashFrom(checkpointHash, msg.sender, executionHash);
+        emit CheckpointExecuted(address(this), executionHash);
 
         /// If there is no attestation and the bypass flag is not used,
         /// then the transaction should revert.
         bool bypassed;
         if (uint160(getCurrentAttester()) == 0) {
             if (BYPASS_FLAG.code.length == 0) {
-                revert AttestationRequired();
+                /// In case the attestation was delivered in a previous transaction, it should
+                /// be loaded from here.
+                bool ok = _tryInitAttestationFromStorage(executionHash);
+                /// No attestations from current tx or previous: revert
+                if (!ok) revert AttestationRequired();
             } else {
                 bypassed = true;
             }
-        }
-
-        executionHash = executionHashFrom(checkpointHash, msg.sender, executionHash);
-        emit CheckpointExecuted(address(this), executionHash);
-
-        if (!bypassed) {
-            /// In case the attestation was delivered in a previous transaction, it should
-            /// be loaded from here.
-            _tryInitAttestationFromStorage(executionHash);
         }
 
         uint256 cacheIndex = StorageSlot.tload(HASH_CACHE_INDEX_SLOT.asUint256());
@@ -193,7 +191,7 @@ contract SecurityValidator is EIP712 {
      * and all checkpoints were used correctly.
      */
     function validateFinalState() public view {
-        _idleOrDone();
+        _requireIdleOrDone();
     }
 
     function _initAttestation(Attestation memory attestation, address attester) internal {
@@ -216,14 +214,16 @@ contract SecurityValidator is EIP712 {
         }
     }
 
-    function _tryInitAttestationFromStorage(bytes32 executionHash) internal {
+    function _tryInitAttestationFromStorage(bytes32 executionHash) internal returns (bool) {
         // Avoid reentrancy or double init: Make sure that we are starting from a
         // zero state or after a previous attestation has been used.
-        if (!_idleOrDone()) return;
+        if (!_idleOrDone()) return false;
 
         StoredAttestation storage storedAttestation = attestations[executionHash];
+        if (storedAttestation.attestation.deadline == 0) revert AttestationNotFound();
         _initAttestation(storedAttestation.attestation, storedAttestation.attester);
         delete(attestations[executionHash]);
+        return true;
     }
 
     function _idleOrDone() internal view returns (bool) {

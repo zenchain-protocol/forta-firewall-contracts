@@ -41,6 +41,16 @@ contract SecurityPolicy {
         trustedAttester = _trustedAttester;
     }
 
+    modifier withTrustedAttester() {
+        _;
+        /// TODO: Check current attester against multiple attesters.
+        if (trustedValidator.getCurrentAttester() != trustedAttester) {
+            if (BYPASS_FLAG.code.length == 0) {
+                revert UntrustedAttester();
+            }
+        }
+    }
+
     /**
      * @notice Adjusts the threshold value of a checkpoint
      * @dev TODO: Need to implement access control.
@@ -70,14 +80,8 @@ contract SecurityPolicy {
      */
     function executeCheckpoint(bytes32 checkpointId, bytes32 callHash, uint256 referenceAmount, Threshold thresholdType)
         public
+        withTrustedAttester
     {
-        /// TODO: Check current attester against multiple attesters.
-        if (trustedValidator.getCurrentAttester() != trustedAttester) {
-            if (BYPASS_FLAG.code.length == 0) {
-                revert UntrustedAttester();
-            }
-        }
-
         uint256 threshold = thresholds[checkpointId];
         bytes32 checkpointHash = checkpointHashOf(checkpointId, callHash, msg.sender);
 
