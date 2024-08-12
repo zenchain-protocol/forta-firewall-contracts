@@ -208,7 +208,7 @@ contract EulerDummyVaultTest is Test {
         evc.batch(batch);
     }
 
-    function test_attestationGas() public {
+    function test_attestationGas_saveAttestation() public {
         _computeAttestationHashes(address(policy));
         _signAttestation();
 
@@ -216,6 +216,16 @@ contract EulerDummyVaultTest is Test {
         validator.saveAttestation(attestation, attestationSignature);
         vault.doFirst(123);
         vault.doSecond(456);
+
+        vm.stopPrank();
+    }
+
+    function test_attestationGas_storeAttestation() public {
+        _computeAttestationHashes(address(policy));
+        _signAttestation();
+
+        vm.startPrank(address(evc), user);
+        validator.storeAttestation(attestation, attestationSignature);
 
         vm.stopPrank();
     }

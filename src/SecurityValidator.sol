@@ -53,6 +53,7 @@ contract SecurityValidator is EIP712 {
     error InvalidExecutionHash(address validator, bytes32 expectedHash, bytes32 computedHash);
     error InvalidAttestation();
     error AttestationNotFound();
+    error EmptyAttestation();
 
     event CheckpointExecuted(address validator, bytes32 executionHash);
 
@@ -85,6 +86,7 @@ contract SecurityValidator is EIP712 {
      * @param attestationSignature Signature of EIP-712 message
      */
     function storeAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
+        if (attestation.executionHashes.length == 0) revert EmptyAttestation();
         bytes32 firstExecHash = attestation.executionHashes[0];
         StoredAttestation storage storedAttestation = attestations[firstExecHash];
         if (storedAttestation.attestation.deadline > block.timestamp) {
