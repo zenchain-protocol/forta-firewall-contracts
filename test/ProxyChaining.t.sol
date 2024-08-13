@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 import {Test, console, Vm} from "forge-std/Test.sol";
-import "../src/SecurityProxy.sol";
+import "../src/SecurityProxyExperiment.sol";
 import {ISecurityValidator, SecurityValidator, BYPASS_FLAG} from "../src/SecurityValidator.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
@@ -25,7 +25,7 @@ contract LogicContract {
 
 contract ProxyChainingTest is Test {
     ERC1967Proxy mainProxy;
-    SecurityProxy securityProxy;
+    SecurityProxyExperiment securityProxy;
     LogicContract logic;
 
     ERC1967Proxy altProxy;
@@ -33,7 +33,7 @@ contract ProxyChainingTest is Test {
     function setUp() public {
         logic = new LogicContract();
 
-        securityProxy = new SecurityProxy();
+        securityProxy = new SecurityProxyExperiment();
 
         bytes memory data; // empty
         /// Main proxy points to the security proxy.
