@@ -166,7 +166,7 @@ contract SecurityProxy is Proxy, Multicall {
         return ref;
     }
 
-    function _getStorage() internal view returns (Storage storage $) {
+    function _getStorage() internal pure returns (Storage storage $) {
         assembly {
             $.slot := STORAGE_SLOT
         }
