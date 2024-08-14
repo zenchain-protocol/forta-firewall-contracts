@@ -1,21 +1,25 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.25;
 
-import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
-import {Attestation} from "./SecurityValidator.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
 
-/// @notice The subset of the security validator functions that is required by the proxy.
-interface ISecurityValidator {
-    function getCurrentAttester() external view returns (address);
-    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
-    function executeCheckpoint(bytes32 checkpointHash) external;
+interface ISecurityProxy {
+    function initializeSecurityProxy(address _admin, ISecurityValidator _validator) external;
+    function configureSecurityProxy(address _admin, ISecurityValidator _validator) external;
+    function proxiableUUID() external view returns (bytes32);
+    function upgradeNextAndCall(address newImplementation, bytes memory data) external;
+    function updateSecurityProxyAdmin(address newAdmin) external;
+    function setCheckpointThreshold(string memory funcSig, uint256 threshold) external;
+    function getCheckpointThreshold(string memory funcSig) external view returns (uint256);
 }
 
-contract SecurityProxy is UUPSUpgradeable, Proxy, Multicall {
+contract SecurityProxy is Proxy, Multicall {
     error AlreadyInitialized();
+    error UpgradeNonPayable();
 
     struct Storage {
         address admin;
@@ -23,12 +27,12 @@ contract SecurityProxy is UUPSUpgradeable, Proxy, Multicall {
         mapping(bytes4 => uint256) thresholds;
     }
 
-    /// @custom:storage-location erc7201:forta.SecurityProxy.implementation
-    bytes32 internal constant SECURITY_PROXY_IMPLEMENTATION_SLOT =
-        0x3f797f764327c91d4a886d17c1b375263d7ffb23c8519da1de25fdf4c781c000;
+    /// @custom:storage-location erc7201:forta.SecurityProxy.next.implementation
+    bytes32 internal constant NEXT_IMPLEMENTATION_SLOT =
+        0xd545e8ffcb746253c779f78291104681c5efe4255000031cc6e3a635e0223400;
 
     /// @custom:storage-location erc7201:forta.SecurityProxy.storage
-    bytes32 internal constant SECURITY_PROXY_STORAGE_SLOT =
+    bytes32 internal constant STORAGE_SLOT =
         0xacf391f95ab0e100b767a4030b45282ec897f2945f8bc39124a323658cc84800;
 
     modifier onlySecurityProxyAdmin() {
@@ -64,33 +68,23 @@ contract SecurityProxy is UUPSUpgradeable, Proxy, Multicall {
         $.validator = _validator;
     }
 
-    /// @notice TODO: Can this overlap with the next contracts' function in practice?
-    /// It might not since it is used by the respective code that is operating.
-    /// @inheritdoc UUPSUpgradeable
-    function proxiableUUID() external view override notDelegated returns (bytes32) {
-        return SECURITY_PROXY_IMPLEMENTATION_SLOT;
-    }
-
     /**
-     * @notice Avoiding collision with the actual logic contract which is the next in the chain.
-     * Falls back to the TransparentUpgradeableProxy.upgradeToAndCall() function of the next contract.
-     * @inheritdoc UUPSUpgradeable
+     * @notice Sets the next implementation contract which the fallback function will delegatecall to.
+     * Copied and adapted from OpenZeppelin ERC1967Utils.upgradeToAndCall().
+     * @param newImplementation The next implementation contract
+     * @param data Call data
      */
-    function upgradeToAndCall(address, bytes memory) public payable override onlyProxy {
-        _fallback();
-    }
-
-    /**
-     * @notice Avoiding collision with the actual logic contract which is the next in the chain.
-     * Falls back to UUPSUpgradeable.upgradeToAndCall().
-     */
-    function upgradeSecurityProxyAndCall(address newImplementation, bytes memory data)
+    function upgradeNextAndCall(address newImplementation, bytes memory data)
         public
         payable
-        onlyProxy
         onlySecurityProxyAdmin
     {
-        super.upgradeToAndCall(newImplementation, data);
+        StorageSlot.getAddressSlot(NEXT_IMPLEMENTATION_SLOT).value = newImplementation;
+        if (data.length > 0) {
+            Address.functionDelegateCall(newImplementation, data);
+        } else {
+            _checkNonPayable();
+        }
     }
 
     /**
@@ -115,7 +109,7 @@ contract SecurityProxy is UUPSUpgradeable, Proxy, Multicall {
      * @notice Gets the checkpoint threshold for given function signature.
      * @param funcSig Signature of the function.
      */
-    function getCheckpointThreshold(string memory funcSig) public view onlySecurityProxyAdmin returns (uint256) {
+    function getCheckpointThreshold(string memory funcSig) public view returns (uint256) {
         return _getStorage().thresholds[bytes4(keccak256(bytes(funcSig)))];
     }
 
@@ -130,14 +124,9 @@ contract SecurityProxy is UUPSUpgradeable, Proxy, Multicall {
         _getStorage().validator.saveAttestation(attestation, attestationSignature);
     }
 
-    /// @inheritdoc UUPSUpgradeable
-    function _authorizeUpgrade(address) internal view override {
-        require(msg.sender == _getStorage().admin);
-    }
-
     /// @inheritdoc Proxy
     function _implementation() internal view override returns (address) {
-        return StorageSlot.getAddressSlot(SECURITY_PROXY_IMPLEMENTATION_SLOT).value;
+        return StorageSlot.getAddressSlot(NEXT_IMPLEMENTATION_SLOT).value;
     }
 
     /// @notice TODO: Make sure to validate the current attester against an attester registry.
@@ -179,7 +168,18 @@ contract SecurityProxy is UUPSUpgradeable, Proxy, Multicall {
 
     function _getStorage() internal view returns (Storage storage $) {
         assembly {
-            $.slot := SECURITY_PROXY_STORAGE_SLOT
+            $.slot := STORAGE_SLOT
+        }
+    }
+
+    /**
+     * @dev Reverts if `msg.value` is not zero. It can be used to avoid `msg.value` stuck in the contract
+     * if an upgrade doesn't perform an initialization call.
+     * Copied from OpenZeppelin ERC1967Utils library.
+     */
+    function _checkNonPayable() private {
+        if (msg.value > 0) {
+            revert UpgradeNonPayable();
         }
     }
 

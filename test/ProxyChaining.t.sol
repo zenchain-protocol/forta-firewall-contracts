@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 import {Test, console, Vm} from "forge-std/Test.sol";
-import "../src/SecurityProxyExperiment.sol";
+import {ISecurityProxy, SecurityProxy} from "../src/SecurityProxy.sol";
 import {ISecurityValidator, SecurityValidator, BYPASS_FLAG} from "../src/SecurityValidator.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
@@ -24,31 +24,35 @@ contract LogicContract {
 }
 
 contract ProxyChainingTest is Test {
+    SecurityValidator validator;
     ERC1967Proxy mainProxy;
-    SecurityProxyExperiment securityProxy;
+    SecurityProxy securityProxy;
     LogicContract logic;
 
     ERC1967Proxy altProxy;
 
+    bytes upgradeData;
+
     function setUp() public {
+        validator = new SecurityValidator();
+
         logic = new LogicContract();
 
-        securityProxy = new SecurityProxyExperiment();
+        securityProxy = new SecurityProxy();
 
-        bytes memory data; // empty
         /// Main proxy points to the security proxy.
-        mainProxy = new ERC1967Proxy(address(securityProxy), data);
+        mainProxy = new ERC1967Proxy(address(securityProxy), upgradeData);
 
         /// Security proxy points to the logic contract but that should be on main proxy storage.
-        ISecurityProxy(address(mainProxy)).setNextImplementation(address(logic));
-        ISecurityProxy(address(mainProxy)).setSecurityValidator(ISecurityValidator(address(new SecurityValidator())));
+        ISecurityProxy(address(mainProxy)).initializeSecurityProxy(address(this), ISecurityValidator(address(validator)));
+        ISecurityProxy(address(mainProxy)).upgradeNextAndCall(address(logic), upgradeData);
         vm.etch(BYPASS_FLAG, bytes("1"));
 
         /// Keep a default threshold for every test.
         ISecurityProxy(address(mainProxy)).setCheckpointThreshold("setNumber(uint256)", 123);
 
         /// Define an alternative main proxy that directly integrates with the logic contract.
-        altProxy = new ERC1967Proxy(address(logic), data);
+        altProxy = new ERC1967Proxy(address(logic), upgradeData);
     }
 
     function testStorageWrite() public {
@@ -104,11 +108,6 @@ contract ProxyChainingTest is Test {
 
         /// The actual logic contract should give zero.
         knownNumber = logic.getNumber();
-        assertEq(0, knownNumber);
-
-        /// The security proxy should also give zero.
-        securityProxy.setNextImplementation(address(logic));
-        knownNumber = ILogicContract(address(securityProxy)).getNumber();
         assertEq(0, knownNumber);
 
         /// Success!!
