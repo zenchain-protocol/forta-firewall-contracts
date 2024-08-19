@@ -4,7 +4,7 @@ pragma solidity ^0.8.25;
 import {Script, console} from "forge-std/Script.sol";
 import "../src/SecurityValidator.sol";
 import "../src/SecurityPolicy.sol";
-import "../src/euler/DummyVault.sol";
+import "../test/helpers/DummyVault.sol";
 import {EthereumVaultConnector} from "evc/EthereumVaultConnector.sol";
 
 contract DeployerScript is Script {
@@ -18,11 +18,9 @@ contract DeployerScript is Script {
         address attester = vm.addr(attesterPrivateKey);
 
         SecurityValidator validator = new SecurityValidator();
-        SecurityPolicy policy = new SecurityPolicy(ISecurityValidator(address(validator)), attester);
         EthereumVaultConnector evc = new EthereumVaultConnector();
-        DummyVault vault = new DummyVault(ISecurityPolicy(address(policy)));
+        DummyVault vault = new DummyVault(ISecurityValidator(address(validator)));
         console.log("validator contract:", address(validator));
-        console.log("policy contract:", address(policy));
         console.log("evc contract:", address(evc));
         console.log("vault contract:", address(vault));
 

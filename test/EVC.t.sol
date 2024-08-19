@@ -2,13 +2,16 @@
 pragma solidity ^0.8.25;
 
 import {Test, console, Vm} from "forge-std/Test.sol";
-import {IEVC, EthereumVaultConnector} from "evc/EthereumVaultConnector.sol";
-import "../src/euler/DummyVault.sol";
-import {ISecurityPolicy, SecurityPolicy} from "../src/SecurityPolicy.sol";
-import {Attestation, ISecurityValidator, SecurityValidator, BYPASS_FLAG} from "../src/SecurityValidator.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {IEVC, EthereumVaultConnector} from "evc/EthereumVaultConnector.sol";
+import "./helpers/DummyVault.sol";
+import {SecurityPolicy} from "../src/SecurityPolicy.sol";
+import {Attestation, ISecurityValidator, SecurityValidator, BYPASS_FLAG} from "../src/SecurityValidator.sol";
+import {Sensitivity} from "../src/Sensitivity.sol";
 
-contract EulerDummyVaultTest is Test {
+contract EVCTest is Test {
+    using Sensitivity for uint256;
+
     uint256 attesterPrivateKey;
     address attester;
     uint256 userPrivateKey;
@@ -17,7 +20,6 @@ contract EulerDummyVaultTest is Test {
     address otherUser;
 
     SecurityValidator validator;
-    SecurityPolicy policy;
     IEVC evc;
     DummyVault vault;
 
@@ -36,26 +38,25 @@ contract EulerDummyVaultTest is Test {
         otherUser = vm.addr(otherUserPrivateKey);
 
         validator = new SecurityValidator();
-        policy = new SecurityPolicy(ISecurityValidator(address(validator)), attester);
         evc = new EthereumVaultConnector();
-        vault = new DummyVault(ISecurityPolicy(address(policy)));
+        vault = new DummyVault(ISecurityValidator(address(validator)));
 
         /// very large - in seconds
         attestation.deadline = 1000000000;
 
-        _computeAttestationHashes(address(policy));
+        _computeAttestationHashes(address(vault));
         _signAttestation();
     }
 
     function _computeAttestationHashes(address caller) public {
-        bytes memory call1 = abi.encodeWithSignature("doFirst(uint256)", 123);
-        bytes32 callHash1 = keccak256(abi.encode(address(evc), call1));
-        bytes32 checkpointHash1 = policy.checkpointHashOf(DoFirstCheckpoint, callHash1, address(vault));
+        uint256 ref1 = 123;
+        bytes32 checkpointHash1 =
+            keccak256(abi.encode(address(evc), address(vault), DummyVault.doFirst.selector, ref1.reduceSensitivity()));
         executionHash1 = validator.executionHashFrom(checkpointHash1, caller, bytes32(uint256(0)));
 
-        bytes memory call2 = abi.encodeWithSignature("doSecond(uint256)", 456);
-        bytes32 callHash2 = keccak256(abi.encode(address(evc), call2));
-        bytes32 checkpointHash2 = policy.checkpointHashOf(DoSecondCheckpoint, callHash2, address(vault));
+        uint256 ref2 = 456;
+        bytes32 checkpointHash2 =
+            keccak256(abi.encode(address(evc), address(vault), DummyVault.doSecond.selector, ref2.reduceSensitivity()));
         executionHash2 = validator.executionHashFrom(checkpointHash2, caller, executionHash1);
 
         attestation.executionHashes = new bytes32[](2);
@@ -175,7 +176,7 @@ contract EulerDummyVaultTest is Test {
             (foundValidator, foundHash) = abi.decode(entry.data, (address, bytes32));
         }
         assertEq(address(validator), foundValidator);
-        assertEq(bytes32(0xa7247c959f5cdf3cd7ddcd7d678a3144ee7b4f7aa990a89fffea48521b48e391), foundHash);
+        assertEq(bytes32(0xddcbe8ad5fe670c376b05886934bc334946c7f3171c1397504444f18bd2c9cf0), foundHash);
     }
 
     function test_validationFailure() public {
@@ -198,8 +199,8 @@ contract EulerDummyVaultTest is Test {
         });
 
         vm.broadcast(userPrivateKey);
-        bytes32 expectedHash = 0x977bc7e7db2e3b4a8c0c1429b918361dd3088df77fc5e376845e935419067de1;
-        bytes32 computedHash = 0x717422506f33fe9a54df6f78e07e37b48c4f1bdc0616c68107571d74488a5a01;
+        bytes32 expectedHash = 0x8eef2e46cd1e7ae75ac414283c677c544c34901ed90ce97905ebb9b4a87052b3;
+        bytes32 computedHash = 0x70c96fd7e5f694964fb6a6921e5d572ef997cd3cb3257ff901a4651e2242d0cc;
         vm.expectRevert(
             abi.encodeWithSelector(
                 SecurityValidator.InvalidExecutionHash.selector, address(validator), expectedHash, computedHash
@@ -209,7 +210,7 @@ contract EulerDummyVaultTest is Test {
     }
 
     function test_attestationGas_saveAttestation() public {
-        _computeAttestationHashes(address(policy));
+        _computeAttestationHashes(address(vault));
         _signAttestation();
 
         vm.startPrank(address(evc), user);
@@ -221,7 +222,7 @@ contract EulerDummyVaultTest is Test {
     }
 
     function test_attestationGas_storeAttestation() public {
-        _computeAttestationHashes(address(policy));
+        _computeAttestationHashes(address(vault));
         _signAttestation();
 
         vm.startPrank(address(evc), user);

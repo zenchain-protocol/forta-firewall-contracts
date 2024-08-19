@@ -2,19 +2,30 @@
 pragma solidity ^0.8.25;
 
 import {Test, console, Vm} from "forge-std/Test.sol";
-import {ISecurityProxy, SecurityProxy} from "../src/SecurityProxy.sol";
-import {ISecurityValidator, SecurityValidator, BYPASS_FLAG} from "../src/SecurityValidator.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {ISecurityProxy, SecurityProxy} from "../src/SecurityProxy.sol";
+import {Checkpoint} from "../src/SecurityLogic.sol";
+import {
+    ISecurityAccess,
+    SecurityAccessControl,
+    SECURITY_ADMIN_ROLE,
+    PROTOCOL_ADMIN_ROLE
+} from "../src/SecurityAccessControl.sol";
+import {ITrustedAttesters, TrustedAttesters} from "../src/TrustedAttesters.sol";
+import {ISecurityValidator, SecurityValidator, Attestation, BYPASS_FLAG} from "../src/SecurityValidator.sol";
+import {ACTIVATION_CONSTANT_THRESHOLD} from "../src/SecurityLogic.sol";
+import {Sensitivity} from "../src/Sensitivity.sol";
 
 interface ILogicContract {
-    function setNumber(uint256 n) external;
+    function withdrawAmount(uint256 n) external;
     function getNumber() external view returns (uint256);
 }
 
 contract LogicContract {
     uint256 number;
 
-    function setNumber(uint256 n) public {
+    function withdrawAmount(uint256 n) public {
         number = n;
     }
 
@@ -23,8 +34,13 @@ contract LogicContract {
     }
 }
 
-contract ProxyChainingTest is Test {
+contract SecurityProxyTest is Test {
+    using Sensitivity for uint256;
+
     SecurityValidator validator;
+    TrustedAttesters trustedAttesters;
+    SecurityAccessControl securityAccess;
+
     ERC1967Proxy mainProxy;
     SecurityProxy securityProxy;
     LogicContract logic;
@@ -33,8 +49,17 @@ contract ProxyChainingTest is Test {
 
     bytes upgradeData;
 
+    Attestation attestation;
+    bytes attestationSignature;
+
+    Checkpoint checkpoint;
+
     function setUp() public {
         validator = new SecurityValidator();
+
+        trustedAttesters = new TrustedAttesters();
+
+        securityAccess = new SecurityAccessControl(address(this));
 
         logic = new LogicContract();
 
@@ -43,38 +68,77 @@ contract ProxyChainingTest is Test {
         /// Main proxy points to the security proxy.
         mainProxy = new ERC1967Proxy(address(securityProxy), upgradeData);
 
+        /// Add a trusted attester.
+        uint256 attesterPrivateKey = vm.parseUint("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
+        address attester = vm.addr(attesterPrivateKey);
+        address[] memory attesters = new address[](1);
+        attesters[0] = attester;
+        trustedAttesters.addAttesters(attesters);
+
+        /// Generate an attestation to save later.
+        uint256 ref = 234;
+        bytes32 checkpointHash = keccak256(
+            abi.encode(
+                address(this), address(mainProxy), LogicContract.withdrawAmount.selector, ref.reduceSensitivity()
+            )
+        );
+        bytes32 executionHash = validator.executionHashFrom(checkpointHash, address(mainProxy), bytes32(uint256(0)));
+        attestation.executionHashes = new bytes32[](1);
+        attestation.executionHashes[0] = executionHash;
+        attestation.deadline = 1000000000;
+        /// very large - in seconds
+        bytes32 hashOfAttestation = validator.hashAttestation(attestation);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(attesterPrivateKey, hashOfAttestation);
+        attestationSignature = abi.encodePacked(r, s, v);
+
+        /// Configure access control.
+        securityAccess.grantRole(SECURITY_ADMIN_ROLE, address(this));
+        securityAccess.grantRole(PROTOCOL_ADMIN_ROLE, address(this));
+
         /// Security proxy points to the logic contract but that should be on main proxy storage.
-        ISecurityProxy(address(mainProxy)).initializeSecurityProxy(address(this), ISecurityValidator(address(validator)));
+        ISecurityProxy(address(mainProxy)).initializeSecurityConfig(
+            ISecurityValidator(address(validator)),
+            ITrustedAttesters(address(trustedAttesters)),
+            bytes32(0),
+            ISecurityAccess(securityAccess)
+        );
         ISecurityProxy(address(mainProxy)).upgradeNextAndCall(address(logic), upgradeData);
-        vm.etch(BYPASS_FLAG, bytes("1"));
 
         /// Keep a default threshold for every test.
-        ISecurityProxy(address(mainProxy)).setCheckpointThreshold("setNumber(uint256)", 123);
+        checkpoint.threshold = 123;
+        checkpoint.refStart = 4;
+        checkpoint.refEnd = 36;
+        checkpoint.activation = ACTIVATION_CONSTANT_THRESHOLD;
+        checkpoint.trustedOrigin = 0;
+        ISecurityProxy(address(mainProxy)).setCheckpoint("withdrawAmount(uint256)", checkpoint);
 
         /// Define an alternative main proxy that directly integrates with the logic contract.
         altProxy = new ERC1967Proxy(address(logic), upgradeData);
     }
 
-    function testStorageWrite() public {
+    function testSecurityProxyStorageAccess() public {
+        /// Save the attestation first to make the checkpoint work.
+        validator.saveAttestation(attestation, attestationSignature);
+
         vm.startStateDiffRecording();
 
         /// Let's change the threshold of the security proxy but on main proxy storage.
         /// That should work because the implementation of main proxy is the security proxy.
         /// So we can treat main proxy as if it's the security proxy.
-        ISecurityProxy(address(mainProxy)).setCheckpointThreshold("setNumber(uint256)", 123);
+        ISecurityProxy(address(mainProxy)).setCheckpoint("withdrawAmount(uint256)", checkpoint);
 
         /// Validate the number.
-        uint256 knownThreshold = ISecurityProxy(address(mainProxy)).getCheckpointThreshold("setNumber(uint256)");
+        (uint192 knownThreshold,,,,) = ISecurityProxy(address(mainProxy)).getCheckpoint("withdrawAmount(uint256)");
         assertEq(123, knownThreshold);
 
         /// The actual security proxy should give zero threshold because its storage is empty.
-        knownThreshold = securityProxy.getCheckpointThreshold("setNumber(uint256)");
+        (knownThreshold,,,,) = securityProxy.getCheckpoint("withdrawAmount(uint256)");
         assertEq(0, knownThreshold);
 
         /// Let's actually use the logic contract at the end of the chain this time.
         /// We treat the main proxy as if it's the logic contract at the end of the chain
         /// and use main proxy storage.
-        ILogicContract(address(mainProxy)).setNumber(234);
+        ILogicContract(address(mainProxy)).withdrawAmount(234);
 
         /// Verify that only main proxy storage changes with expected values.
         Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
@@ -91,11 +155,13 @@ contract ProxyChainingTest is Test {
                 // console.logBytes32(storageAcc.newValue);
                 assertEq(address(mainProxy), storageAcc.account);
                 if (valueIndex == 0) {
-                    assertEq(uint256(123), uint256(storageAcc.newValue));
+                    /// This is the checkpoint threshold value set by the security proxy.
+                    assertEq(uint256(123), uint192(uint256(storageAcc.newValue)));
                     valueIndex++;
                     continue;
                 }
                 if (valueIndex == 1) {
+                    /// This is the number set by the logic contract.
                     assertEq(uint256(234), uint256(storageAcc.newValue));
                     valueIndex++;
                 }
@@ -118,14 +184,17 @@ contract ProxyChainingTest is Test {
     }
 
     function testProxyGasChainedActive() public {
-        ILogicContract(address(mainProxy)).setNumber(234);
+        vm.etch(BYPASS_FLAG, bytes("1"));
+        ILogicContract(address(mainProxy)).withdrawAmount(234);
     }
 
     function testProxyGasChainedPassive() public {
-        ILogicContract(address(mainProxy)).setNumber(10);
+        vm.etch(BYPASS_FLAG, bytes("1"));
+        ILogicContract(address(mainProxy)).withdrawAmount(10);
     }
 
     function testProxyGasDirect() public {
-        ILogicContract(address(altProxy)).setNumber(234);
+        vm.etch(BYPASS_FLAG, bytes("1"));
+        ILogicContract(address(altProxy)).withdrawAmount(234);
     }
 }
