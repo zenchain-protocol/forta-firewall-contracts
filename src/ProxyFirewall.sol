@@ -5,41 +5,41 @@ import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {ISecurityLogic, SecurityLogic} from "./SecurityLogic.sol";
+import {IFirewall, Firewall} from "./Firewall.sol";
 import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
 import {ITrustedAttesters} from "./TrustedAttesters.sol";
-import {ISecurityAccess} from "./SecurityAccessControl.sol";
+import {IFirewallAccess} from "./FirewallAccess.sol";
 
-interface ISecurityProxy is ISecurityLogic {
+interface IProxyFirewall is IFirewall {
     function initializeSecurityConfig(
         ISecurityValidator _validator,
         ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
-        ISecurityAccess _securityAccess
+        IFirewallAccess _firewallAccess
     ) external;
 
-    function upgradeNextAndCall(address newImplementation, bytes memory data) external;
+    function upgradeNextAndCall(address newImplementation, bytes memory data) external payable;
 }
 
-contract SecurityProxy is SecurityLogic, Proxy {
+contract ProxyFirewall is IProxyFirewall, Firewall, Proxy {
     error UpgradeNonPayable();
 
-    /// @custom:storage-location erc7201:forta.SecurityProxy.next.implementation
+    /// @custom:storage-location erc7201:forta.ProxyFirewall.next.implementation
     bytes32 internal constant NEXT_IMPLEMENTATION_SLOT =
-        0xd545e8ffcb746253c779f78291104681c5efe4255000031cc6e3a635e0223400;
+        0x9e3fe722f43dfec528e68fcd2db9596358ca7182739c61c40dd16fd5eb878300;
 
     /**
      * @notice Initializes the security config for the first time.
-     * @param _validator The security validator which the security proxy calls for saving
+     * @param _validator The security validator which the proxy firewall calls for saving
      * the attestation and executing checkpoints.
      */
     function initializeSecurityConfig(
         ISecurityValidator _validator,
         ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
-        ISecurityAccess _securityAccess
+        IFirewallAccess _firewallAccess
     ) public initializer {
-        _updateSecurityConfig(_validator, _trustedAttesters, _attesterControllerId, _securityAccess);
+        _updateSecurityConfig(_validator, _trustedAttesters, _attesterControllerId, _firewallAccess);
     }
 
     /**

@@ -5,7 +5,6 @@ import {Test, console, Vm} from "forge-std/Test.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IEVC, EthereumVaultConnector} from "evc/EthereumVaultConnector.sol";
 import "./helpers/DummyVault.sol";
-import {SecurityPolicy} from "../src/SecurityPolicy.sol";
 import {Attestation, ISecurityValidator, SecurityValidator, BYPASS_FLAG} from "../src/SecurityValidator.sol";
 import {Sensitivity} from "../src/Sensitivity.sol";
 

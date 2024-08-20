@@ -7,8 +7,8 @@ import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol"
 import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {ISecurityAccess} from "./SecurityAccessControl.sol";
-import {SecurityAccessChecker} from "./SecurityAccessChecker.sol";
+import {IFirewallAccess} from "./FirewallAccess.sol";
+import {FirewallPermissions} from "./FirewallPermissions.sol";
 import {BYPASS_FLAG, ISecurityValidator, Attestation} from "./SecurityValidator.sol";
 import {ITrustedAttesters} from "./TrustedAttesters.sol";
 import {Sensitivity} from "./Sensitivity.sol";
@@ -27,12 +27,12 @@ uint8 constant ACTIVATION_ALWAYS_ACTIVE = 2;
 uint8 constant ACTIVATION_CONSTANT_THRESHOLD = 3;
 uint8 constant ACTIVATION_ACCUMULATED_THRESHOLD = 4;
 
-interface ISecurityLogic {
+interface IFirewall {
     function updateSecurityConfig(
         ISecurityValidator _validator,
         ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
-        ISecurityAccess _securityAccess
+        IFirewallAccess _firewallAccess
     ) external;
 
     function getSecurityConfig()
@@ -42,7 +42,7 @@ interface ISecurityLogic {
             ISecurityValidator _validator,
             ITrustedAttesters _trustedAttesters,
             bytes32 _attesterControllerId,
-            ISecurityAccess _securityAccess
+            IFirewallAccess _firewallAccess
         );
 
     function setCheckpoint(string memory funcSig, Checkpoint memory checkpoint) external;
@@ -52,7 +52,7 @@ interface ISecurityLogic {
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
 }
 
-abstract contract SecurityLogic is ISecurityLogic, SecurityAccessChecker, Initializable, Multicall {
+abstract contract Firewall is IFirewall, FirewallPermissions, Initializable, Multicall {
     using StorageSlot for bytes32;
     using Sensitivity for uint256;
 
@@ -65,7 +65,7 @@ abstract contract SecurityLogic is ISecurityLogic, SecurityAccessChecker, Initia
         ISecurityValidator _validator,
         ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
-        ISecurityAccess _securityAccess
+        IFirewallAccess _firewallAccess
     );
     event SupportsTrustedOrigin(address);
 
@@ -76,40 +76,40 @@ abstract contract SecurityLogic is ISecurityLogic, SecurityAccessChecker, Initia
         mapping(bytes4 => Checkpoint) checkpoints;
     }
 
-    /// @custom:storage-location erc7201:forta.SecurityLogic.storage
-    bytes32 private constant STORAGE_SLOT = 0x485985ccdcd1f70058cc1a5c2b59855a5c9bf4fd2d95c7e42c610811e088ff00;
+    /// @custom:storage-location erc7201:forta.Firewall.storage
+    bytes32 private constant STORAGE_SLOT = 0x993f81a6354aa9d98fa5ac249e63371dfc7f5589eeb8a5b081145c8ed289c400;
 
     /**
      * @notice Initializes the security config for the first time.
-     * @param _validator The security validator which the security proxy calls for saving
+     * @param _validator The security validator which the firewall calls for saving
      * the attestation and executing checkpoints.
      */
     function updateSecurityConfig(
         ISecurityValidator _validator,
         ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
-        ISecurityAccess _securityAccess
+        IFirewallAccess _firewallAccess
     ) public virtual onlySecurityAdmin {
-        _updateSecurityConfig(_validator, _trustedAttesters, _attesterControllerId, _securityAccess);
+        _updateSecurityConfig(_validator, _trustedAttesters, _attesterControllerId, _firewallAccess);
     }
 
     /**
      * @notice Initializes the security config for the first time.
-     * @param _validator The security validator which the security proxy calls for saving
+     * @param _validator The security validator which the firewall calls for saving
      * the attestation and executing checkpoints.
      */
     function _updateSecurityConfig(
         ISecurityValidator _validator,
         ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
-        ISecurityAccess _securityAccess
+        IFirewallAccess _firewallAccess
     ) internal virtual {
         SecurityStorage storage $ = _getSecurityStorage();
         $.validator = _validator;
         $.trustedAttesters = _trustedAttesters;
         $.attesterControllerId = _attesterControllerId;
-        _updateSecurityAccess(_securityAccess);
-        emit SecurityConfigUpdated(_validator, _trustedAttesters, _attesterControllerId, _securityAccess);
+        _updateFirewallAccess(_firewallAccess);
+        emit SecurityConfigUpdated(_validator, _trustedAttesters, _attesterControllerId, _firewallAccess);
     }
 
     function getSecurityConfig()
@@ -119,11 +119,11 @@ abstract contract SecurityLogic is ISecurityLogic, SecurityAccessChecker, Initia
             ISecurityValidator _validator,
             ITrustedAttesters _trustedAttesters,
             bytes32 _attesterControllerId,
-            ISecurityAccess _securityAccess
+            IFirewallAccess _firewallAccess
         )
     {
         SecurityStorage storage $ = _getSecurityStorage();
-        ISecurityAccess securityAccess = _getSecurityAccess();
+        IFirewallAccess securityAccess = _getFirewallAccess();
         return ($.validator, $.trustedAttesters, $.attesterControllerId, securityAccess);
     }
 

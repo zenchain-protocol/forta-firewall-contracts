@@ -4,17 +4,11 @@ pragma solidity ^0.8.25;
 import {Test, console, Vm} from "forge-std/Test.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {ISecurityProxy, SecurityProxy} from "../src/SecurityProxy.sol";
-import {Checkpoint} from "../src/SecurityLogic.sol";
-import {
-    ISecurityAccess,
-    SecurityAccessControl,
-    SECURITY_ADMIN_ROLE,
-    PROTOCOL_ADMIN_ROLE
-} from "../src/SecurityAccessControl.sol";
+import {IProxyFirewall, ProxyFirewall} from "../src/ProxyFirewall.sol";
+import {Checkpoint, ACTIVATION_CONSTANT_THRESHOLD} from "../src/Firewall.sol";
+import {IFirewallAccess, FirewallAccess, FIREWALL_ADMIN_ROLE, PROTOCOL_ADMIN_ROLE} from "../src/FirewallAccess.sol";
 import {ITrustedAttesters, TrustedAttesters} from "../src/TrustedAttesters.sol";
 import {ISecurityValidator, SecurityValidator, Attestation, BYPASS_FLAG} from "../src/SecurityValidator.sol";
-import {ACTIVATION_CONSTANT_THRESHOLD} from "../src/SecurityLogic.sol";
 import {Sensitivity} from "../src/Sensitivity.sol";
 
 interface ILogicContract {
@@ -34,15 +28,15 @@ contract LogicContract {
     }
 }
 
-contract SecurityProxyTest is Test {
+contract ProxyFirewallTest is Test {
     using Sensitivity for uint256;
 
     SecurityValidator validator;
     TrustedAttesters trustedAttesters;
-    SecurityAccessControl securityAccess;
+    FirewallAccess firewallAccess;
 
     ERC1967Proxy mainProxy;
-    SecurityProxy securityProxy;
+    ProxyFirewall proxyFirewall;
     LogicContract logic;
 
     ERC1967Proxy altProxy;
@@ -59,14 +53,14 @@ contract SecurityProxyTest is Test {
 
         trustedAttesters = new TrustedAttesters();
 
-        securityAccess = new SecurityAccessControl(address(this));
+        firewallAccess = new FirewallAccess(address(this));
 
         logic = new LogicContract();
 
-        securityProxy = new SecurityProxy();
+        proxyFirewall = new ProxyFirewall();
 
-        /// Main proxy points to the security proxy.
-        mainProxy = new ERC1967Proxy(address(securityProxy), upgradeData);
+        /// Main proxy points to the proxy firewall.
+        mainProxy = new ERC1967Proxy(address(proxyFirewall), upgradeData);
 
         /// Add a trusted attester.
         uint256 attesterPrivateKey = vm.parseUint("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
@@ -92,17 +86,17 @@ contract SecurityProxyTest is Test {
         attestationSignature = abi.encodePacked(r, s, v);
 
         /// Configure access control.
-        securityAccess.grantRole(SECURITY_ADMIN_ROLE, address(this));
-        securityAccess.grantRole(PROTOCOL_ADMIN_ROLE, address(this));
+        firewallAccess.grantRole(FIREWALL_ADMIN_ROLE, address(this));
+        firewallAccess.grantRole(PROTOCOL_ADMIN_ROLE, address(this));
 
-        /// Security proxy points to the logic contract but that should be on main proxy storage.
-        ISecurityProxy(address(mainProxy)).initializeSecurityConfig(
+        /// Proxy firewall points to the logic contract but that should be on main proxy storage.
+        IProxyFirewall(address(mainProxy)).initializeSecurityConfig(
             ISecurityValidator(address(validator)),
             ITrustedAttesters(address(trustedAttesters)),
             bytes32(0),
-            ISecurityAccess(securityAccess)
+            IFirewallAccess(firewallAccess)
         );
-        ISecurityProxy(address(mainProxy)).upgradeNextAndCall(address(logic), upgradeData);
+        IProxyFirewall(address(mainProxy)).upgradeNextAndCall(address(logic), upgradeData);
 
         /// Keep a default threshold for every test.
         checkpoint.threshold = 123;
@@ -110,29 +104,29 @@ contract SecurityProxyTest is Test {
         checkpoint.refEnd = 36;
         checkpoint.activation = ACTIVATION_CONSTANT_THRESHOLD;
         checkpoint.trustedOrigin = 0;
-        ISecurityProxy(address(mainProxy)).setCheckpoint("withdrawAmount(uint256)", checkpoint);
+        IProxyFirewall(address(mainProxy)).setCheckpoint("withdrawAmount(uint256)", checkpoint);
 
         /// Define an alternative main proxy that directly integrates with the logic contract.
         altProxy = new ERC1967Proxy(address(logic), upgradeData);
     }
 
-    function testSecurityProxyStorageAccess() public {
+    function testProxyFirewallStorageAccess() public {
         /// Save the attestation first to make the checkpoint work.
         validator.saveAttestation(attestation, attestationSignature);
 
         vm.startStateDiffRecording();
 
-        /// Let's change the threshold of the security proxy but on main proxy storage.
-        /// That should work because the implementation of main proxy is the security proxy.
-        /// So we can treat main proxy as if it's the security proxy.
-        ISecurityProxy(address(mainProxy)).setCheckpoint("withdrawAmount(uint256)", checkpoint);
+        /// Let's change the threshold of the proxy firewall but on main proxy storage.
+        /// That should work because the implementation of main proxy is the proxy firewall.
+        /// So we can treat main proxy as if it's the proxy firewall.
+        IProxyFirewall(address(mainProxy)).setCheckpoint("withdrawAmount(uint256)", checkpoint);
 
         /// Validate the number.
-        (uint192 knownThreshold,,,,) = ISecurityProxy(address(mainProxy)).getCheckpoint("withdrawAmount(uint256)");
+        (uint192 knownThreshold,,,,) = IProxyFirewall(address(mainProxy)).getCheckpoint("withdrawAmount(uint256)");
         assertEq(123, knownThreshold);
 
-        /// The actual security proxy should give zero threshold because its storage is empty.
-        (knownThreshold,,,,) = securityProxy.getCheckpoint("withdrawAmount(uint256)");
+        /// The actual proxy firewall should give zero threshold because its storage is empty.
+        (knownThreshold,,,,) = proxyFirewall.getCheckpoint("withdrawAmount(uint256)");
         assertEq(0, knownThreshold);
 
         /// Let's actually use the logic contract at the end of the chain this time.
@@ -155,7 +149,7 @@ contract SecurityProxyTest is Test {
                 // console.logBytes32(storageAcc.newValue);
                 assertEq(address(mainProxy), storageAcc.account);
                 if (valueIndex == 0) {
-                    /// This is the checkpoint threshold value set by the security proxy.
+                    /// This is the checkpoint threshold value set by the proxy firewall.
                     assertEq(uint256(123), uint192(uint256(storageAcc.newValue)));
                     valueIndex++;
                     continue;

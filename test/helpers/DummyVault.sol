@@ -2,10 +2,10 @@
 pragma solidity ^0.8.25;
 
 import "evc/interfaces/IVault.sol";
-import {Checkpoint, ACTIVATION_ALWAYS_ACTIVE} from "../../src/SecurityLogic.sol";
-import {SecurityPolicy} from "../../src/SecurityPolicy.sol";
+import {Checkpoint, ACTIVATION_ALWAYS_ACTIVE} from "../../src/Firewall.sol";
+import {InternalFirewall} from "../../src/InternalFirewall.sol";
 import {ISecurityValidator} from "../../src/SecurityValidator.sol";
-import {ISecurityAccess} from "../../src/SecurityAccessControl.sol";
+import {IFirewallAccess} from "../../src/FirewallAccess.sol";
 import {ITrustedAttesters} from "../../src/TrustedAttesters.sol";
 
 bytes32 constant DoFirstCheckpoint = keccak256("doFirst");
@@ -35,9 +35,9 @@ contract DummySecurityAccess {
     }
 }
 
-contract DummyVault is IVault, SecurityPolicy {
+contract DummyVault is IVault, InternalFirewall {
     constructor(ISecurityValidator _validator)
-        SecurityPolicy(_validator, _initTrustedAttesters(), bytes32(0), _initSecurityAccess())
+        InternalFirewall(_validator, _initTrustedAttesters(), bytes32(0), _initSecurityAccess())
     {
         Checkpoint memory checkpoint;
         checkpoint.threshold = 0;
@@ -53,8 +53,8 @@ contract DummyVault is IVault, SecurityPolicy {
         return ITrustedAttesters(address(new DummyTrustedAttesters()));
     }
 
-    function _initSecurityAccess() private returns (ISecurityAccess) {
-        return ISecurityAccess(address(new DummySecurityAccess()));
+    function _initSecurityAccess() private returns (IFirewallAccess) {
+        return IFirewallAccess(address(new DummySecurityAccess()));
     }
 
     function disableController() public {}

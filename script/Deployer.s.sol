@@ -3,7 +3,6 @@ pragma solidity ^0.8.25;
 
 import {Script, console} from "forge-std/Script.sol";
 import "../src/SecurityValidator.sol";
-import "../src/SecurityPolicy.sol";
 import "../test/helpers/DummyVault.sol";
 import {EthereumVaultConnector} from "evc/EthereumVaultConnector.sol";
 
