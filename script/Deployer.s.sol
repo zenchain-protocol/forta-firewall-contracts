@@ -13,8 +13,8 @@ contract DeployerScript is Script {
         uint256 deployer = vm.parseUint(deployerPrivateKeyStr);
         vm.startBroadcast(deployer);
 
-        // 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 - dev attester
-        uint256 attesterPrivateKey = vm.parseUint("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
+        // 0x875A57917E46A440c71d9EC6F6B5c8B772D6C895 - dev attester
+        uint256 attesterPrivateKey = vm.parseUint("0x14e000d8d8aaad9595be9d90b2c35097f00a3bb3882183035788fdf5acf7192e");
         address attester = vm.addr(attesterPrivateKey);
 
         SecurityValidator validator = new SecurityValidator();
