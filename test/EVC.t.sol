@@ -6,10 +6,10 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IEVC, EthereumVaultConnector} from "evc/EthereumVaultConnector.sol";
 import "./helpers/DummyVault.sol";
 import {Attestation, ISecurityValidator, SecurityValidator, BYPASS_FLAG} from "../src/SecurityValidator.sol";
-import {Sensitivity} from "../src/Sensitivity.sol";
+import {Quantization} from "../src/Quantization.sol";
 
 contract EVCTest is Test {
-    using Sensitivity for uint256;
+    using Quantization for uint256;
 
     uint256 attesterPrivateKey;
     address attester;
@@ -50,12 +50,12 @@ contract EVCTest is Test {
     function _computeAttestationHashes(address caller) public {
         uint256 ref1 = 123;
         bytes32 checkpointHash1 =
-            keccak256(abi.encode(address(evc), address(vault), DummyVault.doFirst.selector, ref1.reduceSensitivity()));
+            keccak256(abi.encode(address(evc), address(vault), DummyVault.doFirst.selector, ref1.quantize()));
         executionHash1 = validator.executionHashFrom(checkpointHash1, caller, bytes32(uint256(0)));
 
         uint256 ref2 = 456;
         bytes32 checkpointHash2 =
-            keccak256(abi.encode(address(evc), address(vault), DummyVault.doSecond.selector, ref2.reduceSensitivity()));
+            keccak256(abi.encode(address(evc), address(vault), DummyVault.doSecond.selector, ref2.quantize()));
         executionHash2 = validator.executionHashFrom(checkpointHash2, caller, executionHash1);
 
         attestation.executionHashes = new bytes32[](2);

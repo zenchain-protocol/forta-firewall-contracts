@@ -9,7 +9,7 @@ import {Checkpoint, ACTIVATION_CONSTANT_THRESHOLD} from "../src/Firewall.sol";
 import {IFirewallAccess, FirewallAccess, FIREWALL_ADMIN_ROLE, PROTOCOL_ADMIN_ROLE} from "../src/FirewallAccess.sol";
 import {ITrustedAttesters, TrustedAttesters} from "../src/TrustedAttesters.sol";
 import {ISecurityValidator, SecurityValidator, Attestation, BYPASS_FLAG} from "../src/SecurityValidator.sol";
-import {Sensitivity} from "../src/Sensitivity.sol";
+import {Quantization} from "../src/Quantization.sol";
 
 interface ILogicContract {
     function withdrawAmount(uint256 n) external;
@@ -29,7 +29,7 @@ contract LogicContract {
 }
 
 contract ProxyFirewallTest is Test {
-    using Sensitivity for uint256;
+    using Quantization for uint256;
 
     SecurityValidator validator;
     TrustedAttesters trustedAttesters;
@@ -72,9 +72,7 @@ contract ProxyFirewallTest is Test {
         /// Generate an attestation to save later.
         uint256 ref = 234;
         bytes32 checkpointHash = keccak256(
-            abi.encode(
-                address(this), address(mainProxy), LogicContract.withdrawAmount.selector, ref.reduceSensitivity()
-            )
+            abi.encode(address(this), address(mainProxy), LogicContract.withdrawAmount.selector, ref.quantize())
         );
         bytes32 executionHash = validator.executionHashFrom(checkpointHash, address(mainProxy), bytes32(uint256(0)));
         attestation.executionHashes = new bytes32[](1);

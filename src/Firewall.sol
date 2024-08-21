@@ -11,7 +11,7 @@ import {IFirewallAccess} from "./FirewallAccess.sol";
 import {FirewallPermissions} from "./FirewallPermissions.sol";
 import {BYPASS_FLAG, ISecurityValidator, Attestation} from "./SecurityValidator.sol";
 import {ITrustedAttesters} from "./TrustedAttesters.sol";
-import {Sensitivity} from "./Sensitivity.sol";
+import {Quantization} from "./Quantization.sol";
 
 struct Checkpoint {
     uint192 threshold;
@@ -54,7 +54,7 @@ interface IFirewall {
 
 abstract contract Firewall is IFirewall, FirewallPermissions, Initializable, Multicall {
     using StorageSlot for bytes32;
-    using Sensitivity for uint256;
+    using Quantization for uint256;
 
     error AlreadyInitialized();
     error InvalidThresholdType();
@@ -210,9 +210,7 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable, Mul
             }
         }
 
-        $.validator.executeCheckpoint(
-            keccak256(abi.encode(msg.sender, address(this), msg.sig, ref.reduceSensitivity()))
-        );
+        $.validator.executeCheckpoint(keccak256(abi.encode(msg.sender, address(this), msg.sig, ref.quantize())));
     }
 
     function _checkpointActivated(Checkpoint storage checkpoint) private returns (uint256, bool) {

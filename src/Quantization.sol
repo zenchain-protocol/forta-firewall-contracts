@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.25;
 
-library Sensitivity {
+library Quantization {
     /// TODO: Implement this.
-    function reduceSensitivity(uint256 ref) internal pure returns (uint256) {
+    function quantize(uint256 ref) internal pure returns (uint256) {
         return ref;
     }
 }
