@@ -12,29 +12,34 @@ abstract contract FirewallPermissions {
     bytes32 private constant STORAGE_SLOT = 0x5a36dfc2750cc10abe5f95f24b6fce874396e21527ff7f50fb33b5ccc8b7d500;
 
     modifier onlySecurityAdmin() {
-        require(_getFirewallPerimissionsStorage().firewallAccess.isFirewallAdmin(msg.sender));
+        require(_getFirewallPermissionsStorage().firewallAccess.isFirewallAdmin(msg.sender));
         _;
     }
 
     modifier onlyCheckpointManager() {
-        require(_getFirewallPerimissionsStorage().firewallAccess.isCheckpointManager(msg.sender));
+        require(_getFirewallPermissionsStorage().firewallAccess.isCheckpointManager(msg.sender));
         _;
     }
 
     modifier onlyLogicUpgrader() {
-        require(_getFirewallPerimissionsStorage().firewallAccess.isLogicUpgrader(msg.sender));
+        require(_getFirewallPermissionsStorage().firewallAccess.isLogicUpgrader(msg.sender));
+        _;
+    }
+
+    modifier onlyCheckpointExecutor() {
+        require(_getFirewallPermissionsStorage().firewallAccess.isCheckpointExecutor(msg.sender));
         _;
     }
 
     function _updateFirewallAccess(IFirewallAccess firewallAccess) internal {
-        _getFirewallPerimissionsStorage().firewallAccess = firewallAccess;
+        _getFirewallPermissionsStorage().firewallAccess = firewallAccess;
     }
 
     function _getFirewallAccess() internal view returns (IFirewallAccess) {
-        return _getFirewallPerimissionsStorage().firewallAccess;
+        return _getFirewallPermissionsStorage().firewallAccess;
     }
 
-    function _getFirewallPerimissionsStorage() private pure returns (FirewallPermissionsStorage storage $) {
+    function _getFirewallPermissionsStorage() private pure returns (FirewallPermissionsStorage storage $) {
         assembly {
             $.slot := STORAGE_SLOT
         }

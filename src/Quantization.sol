@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 library Quantization {
-    /// TODO: Implement this.
+    /// TODO: TBD
     function quantize(uint256 ref) internal pure returns (uint256) {
         return ref;
     }

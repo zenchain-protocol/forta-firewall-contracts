@@ -4,7 +4,6 @@ pragma solidity ^0.8.25;
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
@@ -21,14 +20,14 @@ struct Checkpoint {
     uint8 trustedOrigin;
 }
 
-uint8 constant ACTIVATION_UNDEFINED = 0;
+uint8 constant ACTIVATION_INACTIVE = 0;
 uint8 constant ACTIVATION_ALWAYS_BLOCKED = 1;
 uint8 constant ACTIVATION_ALWAYS_ACTIVE = 2;
 uint8 constant ACTIVATION_CONSTANT_THRESHOLD = 3;
 uint8 constant ACTIVATION_ACCUMULATED_THRESHOLD = 4;
 
 interface IFirewall {
-    function updateSecurityConfig(
+    function updateFirewallConfig(
         ISecurityValidator _validator,
         ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
@@ -47,12 +46,29 @@ interface IFirewall {
 
     function setCheckpoint(string memory funcSig, Checkpoint memory checkpoint) external;
 
+    function setCheckpoint(bytes4 selector, Checkpoint memory checkpoint) external;
+
+    function setCheckpointActivation(string memory funcSig, uint8 activation) external;
+
+    function setCheckpointActivation(bytes4 selector, uint8 activation) external;
+
     function getCheckpoint(string memory funcSig) external view returns (uint192, uint16, uint16, uint8, uint8);
+
+    function getCheckpoint(bytes4 selector) external view returns (uint192, uint16, uint16, uint8, uint8);
 
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
 }
 
-abstract contract Firewall is IFirewall, FirewallPermissions, Initializable, Multicall {
+/**
+ * @notice Firewall is a base contract which provides protection against exploits.
+ * It keeps a collection of configurable checkpoints per function, in its namespaced storage,
+ * and makes available internal functions to the child contract in order to help intercept
+ * function calls.
+ *
+ * When a function call is intercepted, one of the arguments is used as a reference to compare
+ * with a configured threshold. Exceeding the threshold
+ */
+abstract contract Firewall is IFirewall, FirewallPermissions, Initializable {
     using StorageSlot for bytes32;
     using Quantization for uint256;
 
@@ -80,31 +96,35 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable, Mul
     bytes32 private constant STORAGE_SLOT = 0x993f81a6354aa9d98fa5ac249e63371dfc7f5589eeb8a5b081145c8ed289c400;
 
     /**
-     * @notice Initializes the security config for the first time.
-     * @param _validator The security validator which the firewall calls for saving
-     * the attestation and executing checkpoints.
+     * @notice Updates the firewall config.
+     * @param _validator Validator used for checkpoint execution calls.
+     * @param _trustedAttesters The set of attesters this proxy trusts. Ideally, this should
+     * point to a default registry contract maintained by Forta.
+     * @param _attesterControllerId The ID of the external controller which keeps settings related
+     * to the attesters.
+     * @param _firewallAccess Firewall access controller.
      */
-    function updateSecurityConfig(
+    function updateFirewallConfig(
         ISecurityValidator _validator,
         ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) public virtual onlySecurityAdmin {
-        _updateSecurityConfig(_validator, _trustedAttesters, _attesterControllerId, _firewallAccess);
+        _updateFirewallConfig(_validator, _trustedAttesters, _attesterControllerId, _firewallAccess);
     }
 
     /**
-     * @notice Initializes the security config for the first time.
+     * @notice Initializes the firewall config for the first time.
      * @param _validator The security validator which the firewall calls for saving
      * the attestation and executing checkpoints.
      */
-    function _updateSecurityConfig(
+    function _updateFirewallConfig(
         ISecurityValidator _validator,
         ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) internal virtual {
-        SecurityStorage storage $ = _getSecurityStorage();
+        SecurityStorage storage $ = _getFirewallStorage();
         $.validator = _validator;
         $.trustedAttesters = _trustedAttesters;
         $.attesterControllerId = _attesterControllerId;
@@ -122,9 +142,9 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable, Mul
             IFirewallAccess _firewallAccess
         )
     {
-        SecurityStorage storage $ = _getSecurityStorage();
-        IFirewallAccess securityAccess = _getFirewallAccess();
-        return ($.validator, $.trustedAttesters, $.attesterControllerId, securityAccess);
+        SecurityStorage storage $ = _getFirewallStorage();
+        IFirewallAccess firewallAccess = _getFirewallAccess();
+        return ($.validator, $.trustedAttesters, $.attesterControllerId, firewallAccess);
     }
 
     /**
@@ -134,7 +154,35 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable, Mul
      * @param checkpoint Checkpoint data.
      */
     function setCheckpoint(string memory funcSig, Checkpoint memory checkpoint) public virtual onlyCheckpointManager {
-        _getSecurityStorage().checkpoints[_toSelector(funcSig)] = checkpoint;
+        _getFirewallStorage().checkpoints[_toSelector(funcSig)] = checkpoint;
+    }
+
+    /**
+     * @notice Sets checkpoint values for given function selector, call data byte range
+     * and with given threshold type.
+     * @param selector Selector of the function.
+     * @param checkpoint Checkpoint data.
+     */
+    function setCheckpoint(bytes4 selector, Checkpoint memory checkpoint) public virtual onlyCheckpointManager {
+        _getFirewallStorage().checkpoints[selector] = checkpoint;
+    }
+
+    /**
+     * @notice Sets the checkpoint activation type.
+     * @param funcSig Signature of the function.
+     * @param activation Activation type.
+     */
+    function setCheckpointActivation(string memory funcSig, uint8 activation) public virtual onlyCheckpointManager {
+        _getFirewallStorage().checkpoints[_toSelector(funcSig)].activation = activation;
+    }
+
+    /**
+     * @notice Sets the checkpoint activation type.
+     * @param selector Selector of the function.
+     * @param activation Activation type.
+     */
+    function setCheckpointActivation(bytes4 selector, uint8 activation) public virtual onlyCheckpointManager {
+        _getFirewallStorage().checkpoints[selector].activation = activation;
     }
 
     /**
@@ -142,7 +190,18 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable, Mul
      * @param funcSig Signature of the function.
      */
     function getCheckpoint(string memory funcSig) public view virtual returns (uint192, uint16, uint16, uint8, uint8) {
-        Checkpoint storage checkpoint = _getSecurityStorage().checkpoints[_toSelector(funcSig)];
+        Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[_toSelector(funcSig)];
+        return (
+            checkpoint.threshold,
+            checkpoint.refStart,
+            checkpoint.refEnd,
+            checkpoint.activation,
+            checkpoint.trustedOrigin
+        );
+    }
+
+    function getCheckpoint(bytes4 selector) public view virtual returns (uint192, uint16, uint16, uint8, uint8) {
+        Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[selector];
         return (
             checkpoint.threshold,
             checkpoint.refStart,
@@ -160,7 +219,7 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable, Mul
      * @param attestationSignature The security attestation signature - see SecurityValidator
      */
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
-        _getSecurityStorage().validator.saveAttestation(attestation, attestationSignature);
+        _getFirewallStorage().validator.saveAttestation(attestation, attestationSignature);
     }
 
     /**
@@ -173,24 +232,30 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable, Mul
     function attestedCall(Attestation calldata attestation, bytes calldata attestationSignature, bytes calldata data)
         public
     {
-        _getSecurityStorage().validator.saveAttestation(attestation, attestationSignature);
+        _getFirewallStorage().validator.saveAttestation(attestation, attestationSignature);
         Address.functionDelegateCall(address(this), data);
     }
 
     function _secureExecution() internal virtual {
-        Checkpoint storage checkpoint = _getSecurityStorage().checkpoints[msg.sig];
-        (uint256 ref, bool ok) = _checkpointActivated(checkpoint);
+        Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[msg.sig];
+        (uint256 ref, bool ok) = _checkpointActivated(msg.sig, checkpoint);
         if (ok) _executeCheckpoint(ref, checkpoint.trustedOrigin);
     }
 
     function _secureExecution(uint256 ref) internal virtual {
-        Checkpoint storage checkpoint = _getSecurityStorage().checkpoints[msg.sig];
-        bool ok = _checkpointActivatedWithRef(ref, checkpoint);
+        Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[msg.sig];
+        bool ok = _checkpointActivatedWithRef(msg.sig, ref, checkpoint);
+        if (ok) _executeCheckpoint(ref, checkpoint.trustedOrigin);
+    }
+
+    function _secureExecution(bytes4 selector, uint256 ref) internal virtual {
+        Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[selector];
+        bool ok = _checkpointActivatedWithRef(selector, ref, checkpoint);
         if (ok) _executeCheckpoint(ref, checkpoint.trustedOrigin);
     }
 
     function _executeCheckpoint(uint256 ref, uint256 trustedOrigin) private {
-        SecurityStorage storage $ = _getSecurityStorage();
+        SecurityStorage storage $ = _getFirewallStorage();
 
         /// Short-circuit if the trusted origin pattern is supported and
         /// is available.
@@ -213,28 +278,31 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable, Mul
         $.validator.executeCheckpoint(keccak256(abi.encode(msg.sender, address(this), msg.sig, ref.quantize())));
     }
 
-    function _checkpointActivated(Checkpoint storage checkpoint) private returns (uint256, bool) {
+    function _checkpointActivated(bytes4 selector, Checkpoint storage checkpoint) private returns (uint256, bool) {
         bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
         uint256 ref = uint256(bytes32(byteRange));
-        return (ref, _checkpointActivatedWithRef(ref, checkpoint));
+        return (ref, _checkpointActivatedWithRef(selector, ref, checkpoint));
     }
 
-    function _checkpointActivatedWithRef(uint256 ref, Checkpoint storage checkpoint) private returns (bool) {
-        if (checkpoint.activation == ACTIVATION_UNDEFINED) return false;
+    function _checkpointActivatedWithRef(bytes4 selector, uint256 ref, Checkpoint storage checkpoint)
+        private
+        returns (bool)
+    {
+        if (checkpoint.activation == ACTIVATION_INACTIVE) return false;
         if (checkpoint.activation == ACTIVATION_ALWAYS_BLOCKED) revert CheckpointBlocked();
         if (checkpoint.activation == ACTIVATION_ALWAYS_ACTIVE) return true;
         if (checkpoint.activation == ACTIVATION_CONSTANT_THRESHOLD) return ref >= checkpoint.threshold;
         if (checkpoint.activation != ACTIVATION_ACCUMULATED_THRESHOLD) {
             revert InvalidThresholdType();
         }
-        bytes32 slot = keccak256(abi.encode(msg.sig, msg.sender));
+        bytes32 slot = keccak256(abi.encode(selector, msg.sender));
         uint256 acc = StorageSlot.tload(slot.asUint256());
         acc += ref;
         StorageSlot.tstore(slot.asUint256(), acc);
         return acc >= checkpoint.threshold;
     }
 
-    function _getSecurityStorage() internal pure virtual returns (SecurityStorage storage $) {
+    function _getFirewallStorage() internal pure virtual returns (SecurityStorage storage $) {
         assembly {
             $.slot := STORAGE_SLOT
         }

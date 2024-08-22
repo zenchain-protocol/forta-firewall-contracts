@@ -11,6 +11,10 @@ interface ITrustedAttesters {
 
 bytes32 constant ATTESTER_MANAGER_ROLE = keccak256("ATTESTER_MANAGER_ROLE");
 
+/**
+ * @notice This contract is for maintaining the trusted set of attesters which a firewall
+ * relies on. This is useful in making firewalls trust custom set of attesters if needed.
+ */
 contract TrustedAttesters is AccessControl {
     mapping(address => bool) attesters;
 

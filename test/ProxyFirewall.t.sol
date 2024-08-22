@@ -88,7 +88,7 @@ contract ProxyFirewallTest is Test {
         firewallAccess.grantRole(PROTOCOL_ADMIN_ROLE, address(this));
 
         /// Proxy firewall points to the logic contract but that should be on main proxy storage.
-        IProxyFirewall(address(mainProxy)).initializeSecurityConfig(
+        IProxyFirewall(address(mainProxy)).initializeFirewallConfig(
             ISecurityValidator(address(validator)),
             ITrustedAttesters(address(trustedAttesters)),
             bytes32(0),

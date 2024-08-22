@@ -11,7 +11,7 @@ import {ITrustedAttesters} from "./TrustedAttesters.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
 
 interface IProxyFirewall is IFirewall {
-    function initializeSecurityConfig(
+    function initializeFirewallConfig(
         ISecurityValidator _validator,
         ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
@@ -21,7 +21,32 @@ interface IProxyFirewall is IFirewall {
     function upgradeNextAndCall(address newImplementation, bytes memory data) external payable;
 }
 
-contract ProxyFirewall is IProxyFirewall, Firewall, Proxy {
+/**
+ * @notice This contract provides firewall functionality as an intermediary contract
+ * between a proxy and a logic contract, acting as a proxy firewall. It automatically
+ * intercepts any calls to the logic contract, tries to execute checkpoints if needed and
+ * falls back to the original logic contract with delegatecall.
+ *
+ * The storage used by the Firewall contract and the proxy firewall contract is namespaced
+ * and causes no collision. The checkpoints must be adjusted by calling the setCheckpoint(Checkpoint)
+ * function.
+ *
+ * When used with an ERC1967 proxy and a UUPSUpgradeable logic contract, the proxy storage points
+ * points to the proxy firewall and the proxy firewall points to the logic contract, in the proxy
+ * storage. Both of the proxy firewall and the logic contract operate on the proxy storage.
+ *
+ * The UUPSUpgradeable logic contract keeps the privileges to modify the implementation specified
+ * at ERC1967 proxy storage. The proxy firewall is able to point to a next implementation on the
+ * proxy storage. To upgrade to the proxy firewall atomically, the logic contract should be invoked
+ * to modify the implementation storage on the proxy, in order to point to the proxy firewall logic.
+ * As a next action in the same transaction, the proxy firewall should be pointed to the logic contract.
+ * For such upgrade cases, upgradeToAndCall() and upgradeNextAndCall() functions are made available
+ * from the proxy firewall and the UUPSUpgradeable contracts, respectively.
+ *
+ * This contract preserves msg.sender, msg.sig and msg.data because it falls back to doing a DELEGATECALL
+ * on the next implementation with the same call data.
+ */
+contract ProxyFirewall is IProxyFirewall, Firewall, Proxy, Multicall {
     error UpgradeNonPayable();
 
     /// @custom:storage-location erc7201:forta.ProxyFirewall.next.implementation
@@ -30,16 +55,20 @@ contract ProxyFirewall is IProxyFirewall, Firewall, Proxy {
 
     /**
      * @notice Initializes the security config for the first time.
-     * @param _validator The security validator which the proxy firewall calls for saving
-     * the attestation and executing checkpoints.
+     * @param _validator Validator used for checkpoint execution calls.
+     * @param _trustedAttesters The set of attesters this proxy trusts. Ideally, this should
+     * point to a default registry contract maintained by Forta.
+     * @param _attesterControllerId The ID of the external controller which keeps settings related
+     * to the attesters.
+     * @param _firewallAccess Firewall access controller.
      */
-    function initializeSecurityConfig(
+    function initializeFirewallConfig(
         ISecurityValidator _validator,
         ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) public initializer {
-        _updateSecurityConfig(_validator, _trustedAttesters, _attesterControllerId, _firewallAccess);
+        _updateFirewallConfig(_validator, _trustedAttesters, _attesterControllerId, _firewallAccess);
     }
 
     /**
