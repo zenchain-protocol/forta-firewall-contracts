@@ -4,6 +4,7 @@ pragma solidity ^0.8.25;
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 
 address constant BYPASS_FLAG = 0x0000000000000000000000000000000000f01274; // "forta" in leetspeak
@@ -43,7 +44,7 @@ interface ISecurityValidator {
  * @notice A singleton to be used by attesters to enable execution and contracts to ensure
  * that execution was enabled by an attester.
  */
-contract SecurityValidator is EIP712 {
+contract SecurityValidator is EIP712, ERC2771Context {
     using StorageSlot for bytes32;
 
     error AttestationOverwrite();
@@ -72,12 +73,12 @@ contract SecurityValidator is EIP712 {
         keccak256("Attestation(uint256 deadline,bytes32[] executionHashes)");
 
     /**
-     * @notice A mapping from first execution hashes to attestations.
-     * This is useful for storing an attestation in a previous transaction.
+     * @notice A mapping from transaction senders to first execution hashes and to attestations.
+     * This is useful for storing an attestation in a previous transaction safely.
      */
-    mapping(bytes32 => StoredAttestation) attestations;
+    mapping(address => mapping(bytes32 => StoredAttestation)) attestations;
 
-    constructor() EIP712("SecurityValidator", "1") {}
+    constructor(address _trustedForwarder) EIP712("SecurityValidator", "1") ERC2771Context(_trustedForwarder) {}
 
     /**
      * @notice An alternative that uses persistent storage instead of transient.
@@ -88,7 +89,8 @@ contract SecurityValidator is EIP712 {
     function storeAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
         if (attestation.executionHashes.length == 0) revert EmptyAttestation();
         bytes32 firstExecHash = attestation.executionHashes[0];
-        StoredAttestation storage storedAttestation = attestations[firstExecHash];
+        address msgSender = _msgSender();
+        StoredAttestation storage storedAttestation = attestations[msgSender][firstExecHash];
         if (storedAttestation.attestation.deadline > block.timestamp) {
             revert AttestationOverwrite();
         }
@@ -96,7 +98,7 @@ contract SecurityValidator is EIP712 {
         bytes32 structHash = hashAttestation(attestation);
         address attester = ECDSA.recover(structHash, attestationSignature);
         storedAttestation.attester = attester;
-        attestations[firstExecHash] = storedAttestation;
+        attestations[msgSender][firstExecHash] = storedAttestation;
     }
 
     /**
@@ -221,10 +223,10 @@ contract SecurityValidator is EIP712 {
         // zero state or after a previous attestation has been used.
         if (!_idleOrDone()) return false;
 
-        StoredAttestation storage storedAttestation = attestations[executionHash];
+        StoredAttestation storage storedAttestation = attestations[tx.origin][executionHash];
         if (storedAttestation.attestation.deadline == 0) revert AttestationNotFound();
         _initAttestation(storedAttestation.attestation, storedAttestation.attester);
-        delete(attestations[executionHash]);
+        delete(attestations[tx.origin][executionHash]);
         return true;
     }
 

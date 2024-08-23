@@ -36,7 +36,7 @@ contract EVCTest is Test {
         otherUserPrivateKey = uint256(keccak256("otherUser"));
         otherUser = vm.addr(otherUserPrivateKey);
 
-        validator = new SecurityValidator();
+        validator = new SecurityValidator(address(0));
         evc = new EthereumVaultConnector();
         vault = new DummyVault(ISecurityValidator(address(validator)));
 

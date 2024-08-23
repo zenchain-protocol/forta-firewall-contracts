@@ -49,7 +49,7 @@ contract ProxyFirewallTest is Test {
     Checkpoint checkpoint;
 
     function setUp() public {
-        validator = new SecurityValidator();
+        validator = new SecurityValidator(address(0));
 
         trustedAttesters = new TrustedAttesters();
 
