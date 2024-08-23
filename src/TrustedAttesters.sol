@@ -5,8 +5,6 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 interface ITrustedAttesters {
     function isTrustedAttester(address attester) external view returns (bool);
-    function addAttesters(address[] calldata added) external;
-    function removeAttesters(address[] calldata removed) external;
 }
 
 bytes32 constant ATTESTER_MANAGER_ROLE = keccak256("ATTESTER_MANAGER_ROLE");

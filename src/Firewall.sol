@@ -34,7 +34,7 @@ interface IFirewall {
         IFirewallAccess _firewallAccess
     ) external;
 
-    function getSecurityConfig()
+    function getFirewallConfig()
         external
         view
         returns (
@@ -59,6 +59,14 @@ interface IFirewall {
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
 }
 
+interface IAttesterInfo {
+    event AttesterControllerUpdated(bytes32 attesterControllerId);
+
+    function getAttesterControllerId() external view returns (bytes32);
+
+    function getTrustedAttesters() external view returns (ITrustedAttesters);
+}
+
 /**
  * @notice Firewall is a base contract which provides protection against exploits.
  * It keeps a collection of configurable checkpoints per function, in its namespaced storage,
@@ -68,7 +76,7 @@ interface IFirewall {
  * When a function call is intercepted, one of the arguments is used as a reference to compare
  * with a configured threshold. Exceeding the threshold
  */
-abstract contract Firewall is IFirewall, FirewallPermissions, Initializable {
+abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Initializable {
     using StorageSlot for bytes32;
     using Quantization for uint256;
 
@@ -78,14 +86,11 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable {
     error CheckpointBlocked();
 
     event SecurityConfigUpdated(
-        ISecurityValidator _validator,
-        ITrustedAttesters _trustedAttesters,
-        bytes32 _attesterControllerId,
-        IFirewallAccess _firewallAccess
+        ISecurityValidator validator, ITrustedAttesters trustedAttesters, IFirewallAccess firewallAccess
     );
     event SupportsTrustedOrigin(address);
 
-    struct SecurityStorage {
+    struct FirewallStorage {
         ISecurityValidator validator;
         ITrustedAttesters trustedAttesters;
         bytes32 attesterControllerId;
@@ -124,15 +129,16 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable {
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) internal virtual {
-        SecurityStorage storage $ = _getFirewallStorage();
+        FirewallStorage storage $ = _getFirewallStorage();
         $.validator = _validator;
         $.trustedAttesters = _trustedAttesters;
         $.attesterControllerId = _attesterControllerId;
         _updateFirewallAccess(_firewallAccess);
-        emit SecurityConfigUpdated(_validator, _trustedAttesters, _attesterControllerId, _firewallAccess);
+        emit SecurityConfigUpdated(_validator, _trustedAttesters, _firewallAccess);
+        emit AttesterControllerUpdated(_attesterControllerId);
     }
 
-    function getSecurityConfig()
+    function getFirewallConfig()
         public
         view
         returns (
@@ -142,9 +148,23 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable {
             IFirewallAccess _firewallAccess
         )
     {
-        SecurityStorage storage $ = _getFirewallStorage();
+        FirewallStorage storage $ = _getFirewallStorage();
         IFirewallAccess firewallAccess = _getFirewallAccess();
         return ($.validator, $.trustedAttesters, $.attesterControllerId, firewallAccess);
+    }
+
+    /**
+     * @notice Returns the attester controller id from the configuration.
+     */
+    function getAttesterControllerId() public view returns (bytes32) {
+        return _getFirewallStorage().attesterControllerId;
+    }
+
+    /**
+     * @notice Returns the trusted attesters from the configuration.
+     */
+    function getTrustedAttesters() public view returns (ITrustedAttesters) {
+        return _getFirewallStorage().trustedAttesters;
     }
 
     /**
@@ -255,7 +275,7 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable {
     }
 
     function _executeCheckpoint(uint256 ref, uint256 trustedOrigin) private {
-        SecurityStorage storage $ = _getFirewallStorage();
+        FirewallStorage storage $ = _getFirewallStorage();
 
         /// Short-circuit if the trusted origin pattern is supported and
         /// is available.
@@ -302,7 +322,7 @@ abstract contract Firewall is IFirewall, FirewallPermissions, Initializable {
         return acc >= checkpoint.threshold;
     }
 
-    function _getFirewallStorage() internal pure virtual returns (SecurityStorage storage $) {
+    function _getFirewallStorage() internal pure virtual returns (FirewallStorage storage $) {
         assembly {
             $.slot := STORAGE_SLOT
         }
