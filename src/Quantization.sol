@@ -13,7 +13,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 library Quantization {
     /**
      * @notice Quantizes the given value by getting the most significant byte and multiplying
-     * it with the amount of zeroes.
+     * it with the amount of zeroes that would be found if the number was rounded.
      * @param n Input value.
      */
     function quantize(uint256 n) internal pure returns (uint256) {
