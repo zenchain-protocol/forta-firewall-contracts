@@ -89,8 +89,6 @@ interface IAttesterInfo {
     event AttesterControllerUpdated(bytes32 attesterControllerId);
 
     function getAttesterControllerId() external view returns (bytes32);
-
-    function getTrustedAttesters() external view returns (ITrustedAttesters);
 }
 
 /**
