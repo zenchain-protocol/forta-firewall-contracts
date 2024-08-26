@@ -157,7 +157,7 @@ contract SecurityValidator is EIP712, ERC2771Context {
         /// If there is no attestation and the bypass flag is not used,
         /// then the transaction should revert.
         bool bypassed;
-        if (uint160(getCurrentAttester()) == 0) {
+        if (getCurrentAttester() == address(0)) {
             if (BYPASS_FLAG.code.length == 0) {
                 /// In case the attestation was delivered in a previous transaction, it should
                 /// be loaded from here.

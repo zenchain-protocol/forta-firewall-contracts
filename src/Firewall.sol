@@ -8,7 +8,7 @@ import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
 import {FirewallPermissions} from "./FirewallPermissions.sol";
-import {BYPASS_FLAG, ISecurityValidator, Attestation} from "./SecurityValidator.sol";
+import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
 import {ITrustedAttesters} from "./TrustedAttesters.sol";
 import {Quantization} from "./Quantization.sol";
 
@@ -333,11 +333,10 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         /// Otherwise, fall back to the checkpoint execution.
 
         /// Ensure first that the current attester can be trusted.
-        if (BYPASS_FLAG.code.length == 0) {
-            address currentAttester = $.validator.getCurrentAttester();
-            if (!$.trustedAttesters.isTrustedAttester(currentAttester)) {
-                revert UntrustedAttester(currentAttester);
-            }
+        /// If the current attester is zero address, let the security validator deal with that.
+        address currentAttester = $.validator.getCurrentAttester();
+        if (currentAttester != address(0) && !$.trustedAttesters.isTrustedAttester(currentAttester)) {
+            revert UntrustedAttester(currentAttester);
         }
 
         $.validator.executeCheckpoint(keccak256(abi.encode(msg.sender, address(this), msg.sig, ref.quantize())));
