@@ -21,16 +21,28 @@ contract TrustedAttesters is AccessControl {
         _grantRole(ATTESTER_MANAGER_ROLE, msg.sender);
     }
 
+    /**
+     * @notice Tells if the given attester is a trusted attester.
+     * @param attester Attester address.
+     */
     function isTrustedAttester(address attester) public view returns (bool) {
         return attesters[attester];
     }
 
+    /**
+     * @notice Adds the given addresses to the list of trusted attesters.
+     * @param added Added attester addresses.
+     */
     function addAttesters(address[] calldata added) public onlyRole(ATTESTER_MANAGER_ROLE) {
         for (uint256 i = 0; i < added.length; i++) {
             attesters[added[i]] = true;
         }
     }
 
+    /**
+     * @notice Removes the given address from the list of trusted attesters.
+     * @param removed Removed attester addresses.
+     */
     function removeAttesters(address[] calldata removed) public onlyRole(ATTESTER_MANAGER_ROLE) {
         for (uint256 i = 0; i < removed.length; i++) {
             delete(attesters[removed[i]]);

@@ -3,6 +3,9 @@ pragma solidity ^0.8.25;
 
 import {IFirewallAccess} from "./FirewallAccess.sol";
 
+/**
+ * @notice Simplifies interactions with a firewall access contract.
+ */
 abstract contract FirewallPermissions {
     struct FirewallPermissionsStorage {
         IFirewallAccess firewallAccess;

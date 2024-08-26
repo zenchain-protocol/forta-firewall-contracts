@@ -18,6 +18,9 @@ interface IFirewallAccess {
     function isCheckpointExecutor(address caller) external view returns (bool);
 }
 
+/**
+ * @notice Keeps the set of accounts which can manage a firewall.
+ */
 contract FirewallAccess is AccessControl, IFirewallAccess {
     constructor(address _defaultAdmin) {
         _grantRole(DEFAULT_ADMIN_ROLE, _defaultAdmin);
@@ -27,22 +30,42 @@ contract FirewallAccess is AccessControl, IFirewallAccess {
         _setRoleAdmin(CHECKPOINT_EXECUTOR_ROLE, PROTOCOL_ADMIN_ROLE);
     }
 
+    /**
+     * @notice Checks if the given address is a firewall admin.
+     * @param caller Caller address.
+     */
     function isFirewallAdmin(address caller) public view returns (bool) {
         return hasRole(FIREWALL_ADMIN_ROLE, caller);
     }
 
+    /**
+     * @notice Checks if the given address is a protocol admin.
+     * @param caller Caller address.
+     */
     function isProtocolAdmin(address caller) public view returns (bool) {
         return hasRole(PROTOCOL_ADMIN_ROLE, caller);
     }
 
+    /**
+     * @notice Checks if the given address is a checkpoint manager.
+     * @param caller Caller address.
+     */
     function isCheckpointManager(address caller) public view returns (bool) {
         return hasRole(PROTOCOL_ADMIN_ROLE, caller) || hasRole(CHECKPOINT_MANAGER_ROLE, caller);
     }
 
+    /**
+     * @notice Checks if the given address is a logic upgrader.
+     * @param caller Caller address.
+     */
     function isLogicUpgrader(address caller) public view returns (bool) {
         return hasRole(PROTOCOL_ADMIN_ROLE, caller) || hasRole(LOGIC_UPGRADER_ROLE, caller);
     }
 
+    /**
+     * @notice Checks if the given address is a checkpoint executor.
+     * @param caller Caller address.
+     */
     function isCheckpointExecutor(address caller) public view returns (bool) {
         return hasRole(PROTOCOL_ADMIN_ROLE, caller) || hasRole(CHECKPOINT_EXECUTOR_ROLE, caller);
     }

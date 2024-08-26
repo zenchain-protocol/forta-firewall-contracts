@@ -12,18 +12,44 @@ import {BYPASS_FLAG, ISecurityValidator, Attestation} from "./SecurityValidator.
 import {ITrustedAttesters} from "./TrustedAttesters.sol";
 import {Quantization} from "./Quantization.sol";
 
+/**
+ * @notice A checkpoint is a configurable point in code that activates in different conditions and
+ * does security checks before proceeding with the rest of the execution.
+ */
 struct Checkpoint {
+    /// @notice The value to compare against an incoming function argument.
     uint192 threshold;
+    /**
+     * @notice Defines the expected start position of the incoming argument in the call data.
+     * This is needed in some integration cases when the reference is found directly from call data
+     * bytes.
+     */
     uint16 refStart;
+    /**
+     * @notice Defines the expected end position of the incoming argument in the call data.
+     * This is needed in some integration cases when the reference is found directly from call data
+     * bytes.
+     */
     uint16 refEnd;
+    /**
+     * @notice Defines the type of checkpoint activation (see types below).
+     */
     uint8 activation;
+    /**
+     * @notice This is for relying on tx.origin instead of hash-based checkpoint execution.
+     */
     uint8 trustedOrigin;
 }
 
+/// @dev The default activation value for an unset checkpoint, which should mean "no security checks".
 uint8 constant ACTIVATION_INACTIVE = 0;
+/// @dev The checkpoint is blocked by default.
 uint8 constant ACTIVATION_ALWAYS_BLOCKED = 1;
+/// @dev Every call to the integrated function should require security checks.
 uint8 constant ACTIVATION_ALWAYS_ACTIVE = 2;
+/// @dev Security checks are only required if a specific function argument exceeds the threshold.
 uint8 constant ACTIVATION_CONSTANT_THRESHOLD = 3;
+/// @dev For adding up all intercepted values by the same checkpoint before comparing with the threshold.
 uint8 constant ACTIVATION_ACCUMULATED_THRESHOLD = 4;
 
 interface IFirewall {
@@ -122,6 +148,12 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
      * @notice Initializes the firewall config for the first time.
      * @param _validator The security validator which the firewall calls for saving
      * the attestation and executing checkpoints.
+     * @param _trustedAttesters The set of trusted attesters which deliver an attestation or act
+     * as tx.origin.
+     * @param _attesterControllerId The id of the controller that lives on Forta chain. Attesters
+     * regards this value to find out the settings for this contract before creating an attestation.
+     * @param _firewallAccess The access control contract that knows the accounts which can manage
+     * the settings of a firewall.
      */
     function _updateFirewallConfig(
         ISecurityValidator _validator,
@@ -138,18 +170,29 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         emit AttesterControllerUpdated(_attesterControllerId);
     }
 
+    /**
+     * @notice Returns the firewall configuration.
+     * @return validator The security validator which the firewall calls for saving
+     * the attestation and executing checkpoints.
+     * @return trustedAttesters The set of trusted attesters which deliver an attestation or act
+     * as tx.origin.
+     * @return attesterControllerId The id of the controller that lives on Forta chain. Attesters
+     * regards this value to find out the settings for this contract before creating an attestation.
+     * @return firewallAccess The access control contract that knows the accounts which can manage
+     * the settings of a firewall.
+     */
     function getFirewallConfig()
         public
         view
         returns (
-            ISecurityValidator _validator,
-            ITrustedAttesters _trustedAttesters,
-            bytes32 _attesterControllerId,
-            IFirewallAccess _firewallAccess
+            ISecurityValidator validator,
+            ITrustedAttesters trustedAttesters,
+            bytes32 attesterControllerId,
+            IFirewallAccess firewallAccess
         )
     {
         FirewallStorage storage $ = _getFirewallStorage();
-        IFirewallAccess firewallAccess = _getFirewallAccess();
+        firewallAccess = _getFirewallAccess();
         return ($.validator, $.trustedAttesters, $.attesterControllerId, firewallAccess);
     }
 
@@ -220,6 +263,10 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         );
     }
 
+    /**
+     * @notice Gets the checkpoint values for given function selector.
+     * @param selector Selector of the function.
+     */
     function getCheckpoint(bytes4 selector) public view virtual returns (uint192, uint16, uint16, uint8, uint8) {
         Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[selector];
         return (
@@ -315,6 +362,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         if (checkpoint.activation != ACTIVATION_ACCUMULATED_THRESHOLD) {
             revert InvalidThresholdType();
         }
+        /// Continue with the "accumulated threshold" logic.
         bytes32 slot = keccak256(abi.encode(selector, msg.sender));
         uint256 acc = StorageSlot.tload(slot.asUint256());
         acc += ref;
