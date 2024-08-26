@@ -309,13 +309,15 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
 
     function _secureExecution(uint256 ref) internal virtual {
         Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[msg.sig];
-        bool ok = _checkpointActivatedWithRef(msg.sig, ref, checkpoint);
+        bool ok;
+        (ref, ok) = _checkpointActivatedWithRef(msg.sig, ref, checkpoint);
         if (ok) _executeCheckpoint(ref, checkpoint.trustedOrigin);
     }
 
     function _secureExecution(bytes4 selector, uint256 ref) internal virtual {
         Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[selector];
-        bool ok = _checkpointActivatedWithRef(selector, ref, checkpoint);
+        bool ok;
+        (ref, ok) = _checkpointActivatedWithRef(selector, ref, checkpoint);
         if (ok) _executeCheckpoint(ref, checkpoint.trustedOrigin);
     }
 
@@ -345,17 +347,17 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     function _checkpointActivated(bytes4 selector, Checkpoint storage checkpoint) private returns (uint256, bool) {
         bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
         uint256 ref = uint256(bytes32(byteRange));
-        return (ref, _checkpointActivatedWithRef(selector, ref, checkpoint));
+        return _checkpointActivatedWithRef(selector, ref, checkpoint);
     }
 
     function _checkpointActivatedWithRef(bytes4 selector, uint256 ref, Checkpoint storage checkpoint)
         private
-        returns (bool)
+        returns (uint256, bool)
     {
-        if (checkpoint.activation == ACTIVATION_INACTIVE) return false;
+        if (checkpoint.activation == ACTIVATION_INACTIVE) return (ref, false);
         if (checkpoint.activation == ACTIVATION_ALWAYS_BLOCKED) revert CheckpointBlocked();
-        if (checkpoint.activation == ACTIVATION_ALWAYS_ACTIVE) return true;
-        if (checkpoint.activation == ACTIVATION_CONSTANT_THRESHOLD) return ref >= checkpoint.threshold;
+        if (checkpoint.activation == ACTIVATION_ALWAYS_ACTIVE) return (1, true); // special case: simplify ref for checkpoint stability
+        if (checkpoint.activation == ACTIVATION_CONSTANT_THRESHOLD) return (ref, ref >= checkpoint.threshold);
         if (checkpoint.activation != ACTIVATION_ACCUMULATED_THRESHOLD) {
             revert InvalidThresholdType();
         }
@@ -364,7 +366,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         uint256 acc = StorageSlot.tload(slot.asUint256());
         acc += ref;
         StorageSlot.tstore(slot.asUint256(), acc);
-        return acc >= checkpoint.threshold;
+        return (ref, acc >= checkpoint.threshold);
     }
 
     function _getFirewallStorage() internal pure virtual returns (FirewallStorage storage $) {
