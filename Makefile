@@ -2,6 +2,16 @@
 deploy:
 	forge script --rpc-url deploy --broadcast ./script/Deployer.s.sol
 
+.PHONY: deploy-firewall
+deploy-firewall:
+	forge script \
+		./script/FirewallDeployer.s.sol:FirewallDeployerScript \
+		--chain 1 \
+		--rpc-url deploy \
+		--broadcast \
+		--slow \
+		--verify
+
 .PHONY: gas
 gas:
 	forge test --match-test attestationGas -vvvv

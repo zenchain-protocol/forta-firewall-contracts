@@ -36,7 +36,7 @@ interface ISecurityValidator {
     function storeAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
 
-    function executeCheckpoint(bytes32 checkpointHash) external;
+    function executeCheckpoint(bytes32 checkpointHash) external returns (bytes32);
 }
 
 /**
@@ -55,8 +55,6 @@ contract SecurityValidator is EIP712, ERC2771Context {
     error InvalidAttestation();
     error AttestationNotFound();
     error EmptyAttestation();
-
-    event CheckpointExecuted(address validator, bytes32 executionHash);
 
     /**
      * @notice Transient storage slots used for storing the attestation values
@@ -149,23 +147,23 @@ contract SecurityValidator is EIP712, ERC2771Context {
      * @param checkpointHash An arbitrary hash which can be computed by using variety of values
      * that occur during a call
      */
-    function executeCheckpoint(bytes32 checkpointHash) public {
+    function executeCheckpoint(bytes32 checkpointHash) public returns (bytes32) {
         bytes32 executionHash = StorageSlot.tload(HASH_SLOT.asBytes32());
         executionHash = executionHashFrom(checkpointHash, msg.sender, executionHash);
-        emit CheckpointExecuted(address(this), executionHash);
 
         /// If there is no attestation and the bypass flag is not used,
         /// then the transaction should revert.
         bool bypassed;
         if (getCurrentAttester() == address(0)) {
-            if (BYPASS_FLAG.code.length == 0) {
+            /// Can't have zero balance - see the constructor.
+            /// This can be set to zero from the trace state override.
+            bypassed = BYPASS_FLAG.code.length > 0;
+            if (!bypassed) {
                 /// In case the attestation was delivered in a previous transaction, it should
                 /// be loaded from here.
                 bool ok = _tryInitAttestationFromStorage(executionHash);
                 /// No attestations from current tx or previous: revert
                 if (!ok) revert AttestationRequired();
-            } else {
-                bypassed = true;
             }
         }
 
@@ -188,6 +186,9 @@ contract SecurityValidator is EIP712, ERC2771Context {
         cacheIndex++;
         StorageSlot.tstore(HASH_SLOT.asBytes32(), executionHash);
         StorageSlot.tstore(HASH_CACHE_INDEX_SLOT.asUint256(), cacheIndex);
+
+        /// Expose the execution hash in the call output which is visible from the trace.
+        return executionHash;
     }
 
     /**

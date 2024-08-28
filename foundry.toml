@@ -9,3 +9,6 @@ gas_reports_ignore = ["SecurityProxy", "LogicContract"]
 deploy = "${DEPLOY_RPC}"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+[etherscan]
+unknown_chain = { key = "${TENDERLY_ACCESS_KEY}", chain = 1, url = "${DEPLOY_RPC}/verify/etherscan" }
