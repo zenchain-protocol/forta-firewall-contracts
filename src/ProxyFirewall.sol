@@ -53,6 +53,10 @@ contract ProxyFirewall is IProxyFirewall, Firewall, Proxy, Multicall {
     bytes32 internal constant NEXT_IMPLEMENTATION_SLOT =
         0x9e3fe722f43dfec528e68fcd2db9596358ca7182739c61c40dd16fd5eb878300;
 
+    constructor() {
+        _disableInitializers();
+    }
+
     /**
      * @notice Initializes the security config for the first time.
      * @param _validator Validator used for checkpoint execution calls.

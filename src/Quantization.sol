@@ -12,27 +12,11 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
  */
 library Quantization {
     /**
-     * @notice Quantizes the given value by getting the most significant byte and multiplying
-     * it with the amount of zeroes that would be found if the number was rounded.
+     * @notice Quantizes the given value by zeroing the smaller digits.
      * @param n Input value.
      */
-    function quantize(uint256 n) internal pure returns (uint256) {
-        if (n == 0) return 0;
-        return msb(n) * Math.log10(n);
-    }
-
-    /**
-     * @notice Finds the most significant byte by starting from the least significant byte.
-     * @param n Input value.
-     */
-    function msb(uint256 n) internal pure returns (uint256) {
-        if (n == 0) return 0;
-        for (uint256 i = 0; i < 32; i++) {
-            if (n < 256) {
-                return n;
-            }
-            n = n >> 8;
-        }
-        return 0;
+    function quantize(uint256 n) public pure returns (uint256) {
+        uint256 offset = 8 * Math.log256(n);
+        return (n >> offset) << offset;
     }
 }

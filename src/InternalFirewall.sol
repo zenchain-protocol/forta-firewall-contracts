@@ -14,7 +14,7 @@ import {IFirewallAccess} from "./FirewallAccess.sol";
  * is namespaced and causes no collision. The checkpoints must be adjusted by calling the
  * setCheckpoint(Checkpoint) function.
  */
-contract InternalFirewall is Firewall, Multicall {
+abstract contract InternalFirewall is Firewall, Multicall {
     constructor(
         ISecurityValidator _validator,
         ITrustedAttesters _trustedAttesters,
