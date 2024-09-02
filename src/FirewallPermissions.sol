@@ -47,4 +47,8 @@ abstract contract FirewallPermissions {
             $.slot := STORAGE_SLOT
         }
     }
+
+    function _isTrustedAttester(address attester) internal view returns (bool) {
+        return _getFirewallPermissionsStorage().firewallAccess.isTrustedAttester(attester);
+    }
 }

@@ -7,13 +7,11 @@ import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IFirewall, Firewall} from "./Firewall.sol";
 import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
-import {ITrustedAttesters} from "./TrustedAttesters.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
 
 interface IProxyFirewall is IFirewall {
     function initializeFirewallConfig(
         ISecurityValidator _validator,
-        ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) external;
@@ -60,19 +58,16 @@ contract ProxyFirewall is IProxyFirewall, Firewall, Proxy, Multicall {
     /**
      * @notice Initializes the security config for the first time.
      * @param _validator Validator used for checkpoint execution calls.
-     * @param _trustedAttesters The set of attesters this proxy trusts. Ideally, this should
-     * point to a default registry contract maintained by Forta.
      * @param _attesterControllerId The ID of the external controller which keeps settings related
      * to the attesters.
      * @param _firewallAccess Firewall access controller.
      */
     function initializeFirewallConfig(
         ISecurityValidator _validator,
-        ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) public initializer {
-        _updateFirewallConfig(_validator, _trustedAttesters, _attesterControllerId, _firewallAccess);
+        _updateFirewallConfig(_validator, _attesterControllerId, _firewallAccess);
     }
 
     /**

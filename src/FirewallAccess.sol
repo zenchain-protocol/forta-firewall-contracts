@@ -9,6 +9,8 @@ bytes32 constant PROTOCOL_ADMIN_ROLE = 0xd0c934f24ef5a377dc3832429ce607cbe940a3c
 bytes32 constant CHECKPOINT_MANAGER_ROLE = 0x2744166e218551d4b70cd805a1125548316250adef86b0e4941caa239677a49c;
 bytes32 constant LOGIC_UPGRADER_ROLE = 0x8cd1a30abbcda9a4b45f36d916f90dd3359477439ecac772ba02d299a01d78cb;
 bytes32 constant CHECKPOINT_EXECUTOR_ROLE = 0xae57c28fd3eb1dad9c6bc61e0a47e0f57230389fedc20e0381b101467bc4b075;
+bytes32 constant ATTESTER_MANAGER_ROLE = 0xa6104eeb16757cf1b916694e5bc99107eaf38064b4948290b9f96447e33d6396;
+bytes32 constant TRUSTED_ATTESTER_ROLE = 0x725a15d5fb1f1294f13d7272d4441134b951367ff5aebd74853471ce1cfb9cc4;
 
 interface IFirewallAccess {
     function isFirewallAdmin(address caller) external view returns (bool);
@@ -16,6 +18,8 @@ interface IFirewallAccess {
     function isCheckpointManager(address caller) external view returns (bool);
     function isLogicUpgrader(address caller) external view returns (bool);
     function isCheckpointExecutor(address caller) external view returns (bool);
+    function isAttesterManager(address caller) external view returns (bool);
+    function isTrustedAttester(address caller) external view returns (bool);
 }
 
 /**
@@ -28,6 +32,8 @@ contract FirewallAccess is AccessControl, IFirewallAccess {
         _setRoleAdmin(CHECKPOINT_MANAGER_ROLE, PROTOCOL_ADMIN_ROLE);
         _setRoleAdmin(LOGIC_UPGRADER_ROLE, PROTOCOL_ADMIN_ROLE);
         _setRoleAdmin(CHECKPOINT_EXECUTOR_ROLE, PROTOCOL_ADMIN_ROLE);
+        _setRoleAdmin(ATTESTER_MANAGER_ROLE, PROTOCOL_ADMIN_ROLE);
+        _setRoleAdmin(TRUSTED_ATTESTER_ROLE, ATTESTER_MANAGER_ROLE);
     }
 
     /**
@@ -68,5 +74,21 @@ contract FirewallAccess is AccessControl, IFirewallAccess {
      */
     function isCheckpointExecutor(address caller) public view returns (bool) {
         return hasRole(PROTOCOL_ADMIN_ROLE, caller) || hasRole(CHECKPOINT_EXECUTOR_ROLE, caller);
+    }
+
+    /**
+     * @notice Checks if the given address is an attester manager.
+     * @param caller Caller address.
+     */
+    function isAttesterManager(address caller) public view returns (bool) {
+        return hasRole(PROTOCOL_ADMIN_ROLE, caller) || hasRole(ATTESTER_MANAGER_ROLE, caller);
+    }
+
+    /**
+     * @notice Checks if the given address is a trusted attester.
+     * @param caller Caller address.
+     */
+    function isTrustedAttester(address caller) public view returns (bool) {
+        return hasRole(TRUSTED_ATTESTER_ROLE, caller);
     }
 }

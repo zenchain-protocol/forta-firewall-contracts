@@ -9,7 +9,6 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
 import {FirewallPermissions} from "./FirewallPermissions.sol";
 import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
-import {ITrustedAttesters} from "./TrustedAttesters.sol";
 import {Quantization} from "./Quantization.sol";
 
 /**
@@ -58,7 +57,6 @@ enum Activation {
 interface IFirewall {
     function updateFirewallConfig(
         ISecurityValidator _validator,
-        ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) external;
@@ -66,12 +64,7 @@ interface IFirewall {
     function getFirewallConfig()
         external
         view
-        returns (
-            ISecurityValidator _validator,
-            ITrustedAttesters _trustedAttesters,
-            bytes32 _attesterControllerId,
-            IFirewallAccess _firewallAccess
-        );
+        returns (ISecurityValidator _validator, bytes32 _attesterControllerId, IFirewallAccess _firewallAccess);
 
     function setCheckpoint(string memory funcSig, Checkpoint memory checkpoint) external;
 
@@ -112,14 +105,11 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     error UntrustedAttester(address attester);
     error CheckpointBlocked();
 
-    event SecurityConfigUpdated(
-        ISecurityValidator validator, ITrustedAttesters trustedAttesters, IFirewallAccess firewallAccess
-    );
+    event SecurityConfigUpdated(ISecurityValidator validator, IFirewallAccess firewallAccess);
     event SupportsTrustedOrigin(address);
 
     struct FirewallStorage {
         ISecurityValidator validator;
-        ITrustedAttesters trustedAttesters;
         bytes32 attesterControllerId;
         mapping(bytes4 => Checkpoint) checkpoints;
     }
@@ -130,27 +120,22 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     /**
      * @notice Updates the firewall config.
      * @param _validator Validator used for checkpoint execution calls.
-     * @param _trustedAttesters The set of attesters this proxy trusts. Ideally, this should
-     * point to a default registry contract maintained by Forta.
      * @param _attesterControllerId The ID of the external controller which keeps settings related
      * to the attesters.
      * @param _firewallAccess Firewall access controller.
      */
     function updateFirewallConfig(
         ISecurityValidator _validator,
-        ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) public virtual onlySecurityAdmin {
-        _updateFirewallConfig(_validator, _trustedAttesters, _attesterControllerId, _firewallAccess);
+        _updateFirewallConfig(_validator, _attesterControllerId, _firewallAccess);
     }
 
     /**
      * @notice Initializes the firewall config for the first time.
      * @param _validator The security validator which the firewall calls for saving
      * the attestation and executing checkpoints.
-     * @param _trustedAttesters The set of trusted attesters which deliver an attestation or act
-     * as tx.origin.
      * @param _attesterControllerId The id of the controller that lives on Forta chain. Attesters
      * regards this value to find out the settings for this contract before creating an attestation.
      * @param _firewallAccess The access control contract that knows the accounts which can manage
@@ -158,16 +143,14 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
      */
     function _updateFirewallConfig(
         ISecurityValidator _validator,
-        ITrustedAttesters _trustedAttesters,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) internal virtual {
         FirewallStorage storage $ = _getFirewallStorage();
         $.validator = _validator;
-        $.trustedAttesters = _trustedAttesters;
         $.attesterControllerId = _attesterControllerId;
         _updateFirewallAccess(_firewallAccess);
-        emit SecurityConfigUpdated(_validator, _trustedAttesters, _firewallAccess);
+        emit SecurityConfigUpdated(_validator, _firewallAccess);
         emit AttesterControllerUpdated(_attesterControllerId);
     }
 
@@ -175,8 +158,6 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
      * @notice Returns the firewall configuration.
      * @return validator The security validator which the firewall calls for saving
      * the attestation and executing checkpoints.
-     * @return trustedAttesters The set of trusted attesters which deliver an attestation or act
-     * as tx.origin.
      * @return attesterControllerId The id of the controller that lives on Forta chain. Attesters
      * regards this value to find out the settings for this contract before creating an attestation.
      * @return firewallAccess The access control contract that knows the accounts which can manage
@@ -185,16 +166,11 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     function getFirewallConfig()
         public
         view
-        returns (
-            ISecurityValidator validator,
-            ITrustedAttesters trustedAttesters,
-            bytes32 attesterControllerId,
-            IFirewallAccess firewallAccess
-        )
+        returns (ISecurityValidator validator, bytes32 attesterControllerId, IFirewallAccess firewallAccess)
     {
         FirewallStorage storage $ = _getFirewallStorage();
         firewallAccess = _getFirewallAccess();
-        return ($.validator, $.trustedAttesters, $.attesterControllerId, firewallAccess);
+        return ($.validator, $.attesterControllerId, firewallAccess);
     }
 
     /**
@@ -202,13 +178,6 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
      */
     function getAttesterControllerId() public view returns (bytes32) {
         return _getFirewallStorage().attesterControllerId;
-    }
-
-    /**
-     * @notice Returns the trusted attesters from the configuration.
-     */
-    function getTrustedAttesters() public view returns (ITrustedAttesters) {
-        return _getFirewallStorage().trustedAttesters;
     }
 
     /**
@@ -333,7 +302,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         /// is available.
         if (trustedOrigin) {
             emit SupportsTrustedOrigin(address(this));
-            if ($.trustedAttesters.isTrustedAttester(tx.origin)) {
+            if (_isTrustedAttester(tx.origin)) {
                 return;
             }
         }
@@ -342,7 +311,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         /// Ensure first that the current attester can be trusted.
         /// If the current attester is zero address, let the security validator deal with that.
         address currentAttester = $.validator.getCurrentAttester();
-        if (currentAttester != address(0) && !$.trustedAttesters.isTrustedAttester(currentAttester)) {
+        if (currentAttester != address(0) && !_isTrustedAttester(currentAttester)) {
             revert UntrustedAttester(currentAttester);
         }
 

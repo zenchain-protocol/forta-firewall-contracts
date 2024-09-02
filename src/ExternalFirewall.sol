@@ -4,7 +4,6 @@ pragma solidity ^0.8.25;
 import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
 import {Firewall} from "./Firewall.sol";
 import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
-import {ITrustedAttesters} from "./TrustedAttesters.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
 
 interface IExternalFirewall {
@@ -18,13 +17,8 @@ interface IExternalFirewall {
  * be adjusted by calling the setCheckpoint(Checkpoint) function.
  */
 contract ExternalFirewall is Firewall, Multicall {
-    constructor(
-        ISecurityValidator _validator,
-        ITrustedAttesters _trustedAttesters,
-        bytes32 _attesterControllerId,
-        IFirewallAccess _firewallAccess
-    ) {
-        _updateFirewallConfig(_validator, _trustedAttesters, _attesterControllerId, _firewallAccess);
+    constructor(ISecurityValidator _validator, bytes32 _attesterControllerId, IFirewallAccess _firewallAccess) {
+        _updateFirewallConfig(_validator, _attesterControllerId, _firewallAccess);
     }
 
     /**

@@ -5,16 +5,6 @@ import {Script, console} from "forge-std/Script.sol";
 import "../src/ExternalFirewall.sol";
 import "../src/SecurityValidator.sol";
 
-contract DummyTrustedAttesters {
-    function isTrustedAttester(address) public pure returns (bool) {
-        return true;
-    }
-
-    function addAttesters(address[] calldata added) public {}
-
-    function removeAttesters(address[] calldata removed) public {}
-}
-
 contract DummyFirewallAccess {
     function isFirewallAdmin(address) public pure returns (bool) {
         return true;
@@ -35,6 +25,10 @@ contract DummyFirewallAccess {
     function isCheckpointExecutor(address) public pure returns (bool) {
         return true;
     }
+
+    function isTrustedAttester(address) public pure returns (bool) {
+        return true;
+    }
 }
 
 contract FirewallDeployerScript is Script {
@@ -45,10 +39,7 @@ contract FirewallDeployerScript is Script {
 
         SecurityValidator validator = new SecurityValidator(address(0));
         ExternalFirewall externalFirewall = new ExternalFirewall(
-            ISecurityValidator(address(validator)),
-            ITrustedAttesters(address(new DummyTrustedAttesters())),
-            bytes32(0),
-            IFirewallAccess(address(new DummyFirewallAccess()))
+            ISecurityValidator(address(validator)), bytes32(0), IFirewallAccess(address(new DummyFirewallAccess()))
         );
         console.log("validator contract:", address(validator));
         console.log("external firewall contract:", address(externalFirewall));
