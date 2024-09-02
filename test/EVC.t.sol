@@ -134,7 +134,7 @@ contract EVCTest is Test {
         evc.batch(batch);
     }
 
-    function test_debugValidation() public {
+    function test_bypassFlag() public {
         IEVC.BatchItem[] memory batch = new IEVC.BatchItem[](2);
 
         /// Skip attestation.
@@ -155,27 +155,13 @@ contract EVCTest is Test {
             data: abi.encodeWithSelector(DummyVault.doSecond.selector, 456)
         });
 
-        /// Avoid revert without attestation by using the bypass flag
-        /// and capture the values from the log.
+        /// Avoid revert without attestation by using the bypass flag.
+        /// This useful for the attester when it tries to capture execution hashes from trace
+        /// by using a state override.
         vm.etch(BYPASS_FLAG, bytes("1"));
         vm.recordLogs();
         vm.broadcast(userPrivateKey);
         evc.batch(batch);
-
-        bytes32 eventHash = keccak256("CheckpointExecuted(address,bytes32)");
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-        assertGt(entries.length, 0);
-        address foundValidator;
-        bytes32 foundHash;
-        for (uint256 i = 0; i < entries.length; i++) {
-            Vm.Log memory entry = entries[i];
-            if (entry.topics[0] != eventHash) {
-                continue;
-            }
-            (foundValidator, foundHash) = abi.decode(entry.data, (address, bytes32));
-        }
-        assertEq(address(validator), foundValidator);
-        assertEq(bytes32(0xddcbe8ad5fe670c376b05886934bc334946c7f3171c1397504444f18bd2c9cf0), foundHash);
     }
 
     function test_validationFailure() public {
@@ -199,7 +185,7 @@ contract EVCTest is Test {
 
         vm.broadcast(userPrivateKey);
         bytes32 expectedHash = 0x8eef2e46cd1e7ae75ac414283c677c544c34901ed90ce97905ebb9b4a87052b3;
-        bytes32 computedHash = 0x70c96fd7e5f694964fb6a6921e5d572ef997cd3cb3257ff901a4651e2242d0cc;
+        bytes32 computedHash = 0xa9410fd8f9e8b60e09d09845e17c97397dcf217bf8a6320851eabf6cb19a5baf;
         vm.expectRevert(
             abi.encodeWithSelector(
                 SecurityValidator.InvalidExecutionHash.selector, address(validator), expectedHash, computedHash

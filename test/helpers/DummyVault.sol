@@ -28,16 +28,21 @@ contract DummySecurityAccess {
     }
 }
 
-contract DummyVault is IVault, InternalFirewall {
+interface IDummyVault {
+    function doFirst(uint256 amount) external;
+    function doSecond(uint256 amount) external;
+}
+
+contract DummyVault is IVault, IDummyVault, InternalFirewall {
     constructor(ISecurityValidator _validator) InternalFirewall(_validator, bytes32(0), _initSecurityAccess()) {
         Checkpoint memory checkpoint;
         checkpoint.threshold = 0;
         checkpoint.refStart = 4;
         checkpoint.refEnd = 36;
-        checkpoint.activation = Activation.AlwaysActive;
+        checkpoint.activation = Activation.ConstantThreshold;
         checkpoint.trustedOrigin = false;
-        setCheckpoint("doFirst(uint256)", checkpoint);
-        setCheckpoint("doSecond(uint256)", checkpoint);
+        setCheckpoint(IDummyVault.doFirst.selector, checkpoint);
+        setCheckpoint(IDummyVault.doSecond.selector, checkpoint);
     }
 
     function _initSecurityAccess() private returns (IFirewallAccess) {
