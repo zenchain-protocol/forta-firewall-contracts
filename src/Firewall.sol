@@ -34,23 +34,26 @@ struct Checkpoint {
     /**
      * @notice Defines the type of checkpoint activation (see types below).
      */
-    uint8 activation;
+    Activation activation;
     /**
      * @notice This is for relying on tx.origin instead of hash-based checkpoint execution.
      */
-    uint8 trustedOrigin;
+    bool trustedOrigin;
 }
 
-/// @dev The default activation value for an unset checkpoint, which should mean "no security checks".
-uint8 constant ACTIVATION_INACTIVE = 0;
-/// @dev The checkpoint is blocked by default.
-uint8 constant ACTIVATION_ALWAYS_BLOCKED = 1;
-/// @dev Every call to the integrated function should require security checks.
-uint8 constant ACTIVATION_ALWAYS_ACTIVE = 2;
-/// @dev Security checks are only required if a specific function argument exceeds the threshold.
-uint8 constant ACTIVATION_CONSTANT_THRESHOLD = 3;
-/// @dev For adding up all intercepted values by the same checkpoint before comparing with the threshold.
-uint8 constant ACTIVATION_ACCUMULATED_THRESHOLD = 4;
+/// @notice Checkpoint activation modes.
+enum Activation {
+    /// @notice The default activation value for an unset checkpoint, which should mean "no security checks".
+    Inactive,
+    /// @notice The checkpoint is blocked by default.
+    AlwaysBlocked,
+    /// @notice Every call to the integrated function should require security checks.
+    AlwaysActive,
+    /// @notice Security checks are only required if a specific function argument exceeds the threshold.
+    ConstantThreshold,
+    /// @notice For adding up all intercepted values by the same checkpoint before comparing with the threshold.
+    AccumulatedThreshold
+}
 
 interface IFirewall {
     function updateFirewallConfig(
@@ -74,13 +77,13 @@ interface IFirewall {
 
     function setCheckpoint(bytes4 selector, Checkpoint memory checkpoint) external;
 
-    function setCheckpointActivation(string memory funcSig, uint8 activation) external;
+    function setCheckpointActivation(string memory funcSig, Activation activation) external;
 
-    function setCheckpointActivation(bytes4 selector, uint8 activation) external;
+    function setCheckpointActivation(bytes4 selector, Activation activation) external;
 
-    function getCheckpoint(string memory funcSig) external view returns (uint192, uint16, uint16, uint8, uint8);
+    function getCheckpoint(string memory funcSig) external view returns (uint192, uint16, uint16, Activation, bool);
 
-    function getCheckpoint(bytes4 selector) external view returns (uint192, uint16, uint16, uint8, uint8);
+    function getCheckpoint(bytes4 selector) external view returns (uint192, uint16, uint16, Activation, bool);
 
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
 }
@@ -215,7 +218,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
      * @param checkpoint Checkpoint data.
      */
     function setCheckpoint(string memory funcSig, Checkpoint memory checkpoint) public virtual onlyCheckpointManager {
-        _getFirewallStorage().checkpoints[_toSelector(funcSig)] = checkpoint;
+        setCheckpoint(_toSelector(funcSig), checkpoint);
     }
 
     /**
@@ -233,8 +236,12 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
      * @param funcSig Signature of the function.
      * @param activation Activation type.
      */
-    function setCheckpointActivation(string memory funcSig, uint8 activation) public virtual onlyCheckpointManager {
-        _getFirewallStorage().checkpoints[_toSelector(funcSig)].activation = activation;
+    function setCheckpointActivation(string memory funcSig, Activation activation)
+        public
+        virtual
+        onlyCheckpointManager
+    {
+        return setCheckpointActivation(_toSelector(funcSig), activation);
     }
 
     /**
@@ -242,7 +249,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
      * @param selector Selector of the function.
      * @param activation Activation type.
      */
-    function setCheckpointActivation(bytes4 selector, uint8 activation) public virtual onlyCheckpointManager {
+    function setCheckpointActivation(bytes4 selector, Activation activation) public virtual onlyCheckpointManager {
         _getFirewallStorage().checkpoints[selector].activation = activation;
     }
 
@@ -250,22 +257,20 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
      * @notice Gets the checkpoint values for given function signature.
      * @param funcSig Signature of the function.
      */
-    function getCheckpoint(string memory funcSig) public view virtual returns (uint192, uint16, uint16, uint8, uint8) {
-        Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[_toSelector(funcSig)];
-        return (
-            checkpoint.threshold,
-            checkpoint.refStart,
-            checkpoint.refEnd,
-            checkpoint.activation,
-            checkpoint.trustedOrigin
-        );
+    function getCheckpoint(string memory funcSig)
+        public
+        view
+        virtual
+        returns (uint192, uint16, uint16, Activation, bool)
+    {
+        return getCheckpoint(_toSelector(funcSig));
     }
 
     /**
      * @notice Gets the checkpoint values for given function selector.
      * @param selector Selector of the function.
      */
-    function getCheckpoint(bytes4 selector) public view virtual returns (uint192, uint16, uint16, uint8, uint8) {
+    function getCheckpoint(bytes4 selector) public view virtual returns (uint192, uint16, uint16, Activation, bool) {
         Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[selector];
         return (
             checkpoint.threshold,
@@ -321,12 +326,12 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         if (ok) _executeCheckpoint(ref, checkpoint.trustedOrigin);
     }
 
-    function _executeCheckpoint(uint256 ref, uint256 trustedOrigin) private {
+    function _executeCheckpoint(uint256 ref, bool trustedOrigin) private {
         FirewallStorage storage $ = _getFirewallStorage();
 
         /// Short-circuit if the trusted origin pattern is supported and
         /// is available.
-        if (trustedOrigin == 1) {
+        if (trustedOrigin) {
             emit SupportsTrustedOrigin(address(this));
             if ($.trustedAttesters.isTrustedAttester(tx.origin)) {
                 return;
@@ -354,11 +359,11 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         private
         returns (uint256, bool)
     {
-        if (checkpoint.activation == ACTIVATION_INACTIVE) return (ref, false);
-        if (checkpoint.activation == ACTIVATION_ALWAYS_BLOCKED) revert CheckpointBlocked();
-        if (checkpoint.activation == ACTIVATION_ALWAYS_ACTIVE) return (1, true); // special case: simplify ref for checkpoint stability
-        if (checkpoint.activation == ACTIVATION_CONSTANT_THRESHOLD) return (ref, ref >= checkpoint.threshold);
-        if (checkpoint.activation != ACTIVATION_ACCUMULATED_THRESHOLD) {
+        if (checkpoint.activation == Activation.Inactive) return (ref, false);
+        if (checkpoint.activation == Activation.AlwaysBlocked) revert CheckpointBlocked();
+        if (checkpoint.activation == Activation.AlwaysActive) return (1, true); // special case: simplify ref for checkpoint stability
+        if (checkpoint.activation == Activation.ConstantThreshold) return (ref, ref >= checkpoint.threshold);
+        if (checkpoint.activation != Activation.AccumulatedThreshold) {
             revert InvalidThresholdType();
         }
         /// Continue with the "accumulated threshold" logic.
