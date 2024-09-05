@@ -14,7 +14,7 @@ abstract contract FirewallPermissions {
     /// @custom:storage-location erc7201:forta.FirewallPermissions.storage
     bytes32 private constant STORAGE_SLOT = 0x5a36dfc2750cc10abe5f95f24b6fce874396e21527ff7f50fb33b5ccc8b7d500;
 
-    modifier onlySecurityAdmin() {
+    modifier onlyFirewallAdmin() {
         require(_getFirewallPermissionsStorage().firewallAccess.isFirewallAdmin(msg.sender));
         _;
     }

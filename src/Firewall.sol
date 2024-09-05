@@ -128,7 +128,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         ISecurityValidator _validator,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
-    ) public virtual onlySecurityAdmin {
+    ) public virtual onlyFirewallAdmin {
         _updateFirewallConfig(_validator, _attesterControllerId, _firewallAccess);
     }
 
