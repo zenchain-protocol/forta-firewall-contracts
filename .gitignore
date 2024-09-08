@@ -7,8 +7,8 @@ broadcast
 # Docs
 docs/
 
-# Dotenv file
-.env
+# Dotenv files
+.env*
 
 node_modules
 package-lock.json

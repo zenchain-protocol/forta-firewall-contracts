@@ -277,25 +277,23 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
 
     function _secureExecution() internal virtual {
         Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[msg.sig];
-        (uint256 ref, bool ok) = _checkpointActivated(msg.sig, checkpoint);
-        if (ok) _executeCheckpoint(ref, checkpoint.trustedOrigin);
+        bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
+        uint256 ref = uint256(bytes32(byteRange));
+        _secureExecution(ref);
     }
 
     function _secureExecution(uint256 ref) internal virtual {
-        Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[msg.sig];
-        bool ok;
-        (ref, ok) = _checkpointActivatedWithRef(msg.sig, ref, checkpoint);
-        if (ok) _executeCheckpoint(ref, checkpoint.trustedOrigin);
+        return _secureExecution(msg.sig, ref);
     }
 
     function _secureExecution(bytes4 selector, uint256 ref) internal virtual {
         Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[selector];
         bool ok;
-        (ref, ok) = _checkpointActivatedWithRef(selector, ref, checkpoint);
-        if (ok) _executeCheckpoint(ref, checkpoint.trustedOrigin);
+        (ref, ok) = _checkpointActivated(selector, ref, checkpoint);
+        if (ok) _executeCheckpoint(ref, selector, checkpoint.trustedOrigin);
     }
 
-    function _executeCheckpoint(uint256 ref, bool trustedOrigin) private {
+    function _executeCheckpoint(uint256 ref, bytes4 selector, bool trustedOrigin) private {
         FirewallStorage storage $ = _getFirewallStorage();
 
         /// Short-circuit if the trusted origin pattern is supported and
@@ -315,16 +313,10 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
             revert UntrustedAttester(currentAttester);
         }
 
-        $.validator.executeCheckpoint(keccak256(abi.encode(msg.sender, address(this), msg.sig, ref.quantize())));
+        $.validator.executeCheckpoint(keccak256(abi.encode(msg.sender, address(this), selector, ref.quantize())));
     }
 
-    function _checkpointActivated(bytes4 selector, Checkpoint storage checkpoint) private returns (uint256, bool) {
-        bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
-        uint256 ref = uint256(bytes32(byteRange));
-        return _checkpointActivatedWithRef(selector, ref, checkpoint);
-    }
-
-    function _checkpointActivatedWithRef(bytes4 selector, uint256 ref, Checkpoint storage checkpoint)
+    function _checkpointActivated(bytes4 selector, uint256 ref, Checkpoint storage checkpoint)
         private
         returns (uint256, bool)
     {
