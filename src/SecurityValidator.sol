@@ -96,7 +96,6 @@ contract SecurityValidator is EIP712, ERC2771Context {
         bytes32 structHash = hashAttestation(attestation);
         address attester = ECDSA.recover(structHash, attestationSignature);
         storedAttestation.attester = attester;
-        attestations[msgSender][firstExecHash] = storedAttestation;
     }
 
     /**

@@ -100,6 +100,46 @@ contract EVCTest is Test {
         evc.batch(batch);
     }
 
+    function test_attestedEVCBatch_overwrite() public {
+        IEVC.BatchItem[] memory batch = new IEVC.BatchItem[](4);
+
+        /// Save the attestation first.
+        batch[0] = IEVC.BatchItem({
+            targetContract: address(validator),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(SecurityValidator.saveAttestation.selector, attestation, attestationSignature)
+        });
+
+        // Save the attestation again.
+        batch[1] = IEVC.BatchItem({
+            targetContract: address(validator),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(SecurityValidator.saveAttestation.selector, attestation, attestationSignature)
+        });
+
+        /// Call the first vault function.
+        batch[2] = IEVC.BatchItem({
+            targetContract: address(vault),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(DummyVault.doFirst.selector, 123)
+        });
+
+        /// Call the second vault function.
+        batch[3] = IEVC.BatchItem({
+            targetContract: address(vault),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(DummyVault.doSecond.selector, 456)
+        });
+
+        vm.expectRevert();
+        vm.broadcast(userPrivateKey);
+        evc.batch(batch);
+    }
+
     function test_attestedEVCBatch_twoTx() public {
         vm.broadcast(userPrivateKey);
         /// Store the attestation in the first transaction.
@@ -131,6 +171,92 @@ contract EVCTest is Test {
 
         /// The second try should fail as there are no attestations anymore.
         vm.expectRevert();
+        evc.batch(batch);
+    }
+
+    function test_attestedEVCBatch_twoTx_overwrite() public {
+        /// Store the attestation in the first transaction.
+        vm.broadcast(userPrivateKey);
+        validator.storeAttestation(attestation, attestationSignature);
+
+        // Store the attestation for the second time: it should fail because it's an overwrite.
+        vm.expectRevert();
+        vm.broadcast(userPrivateKey);
+        validator.storeAttestation(attestation, attestationSignature);
+    }
+
+    function test_attestedEVCBatch_twoTx_overwriteSave() public {
+        /// Store the attestation in the first transaction.
+        vm.broadcast(userPrivateKey);
+        validator.storeAttestation(attestation, attestationSignature);
+
+        IEVC.BatchItem[] memory batch = new IEVC.BatchItem[](3);
+
+        /// Call the first vault function.
+        batch[0] = IEVC.BatchItem({
+            targetContract: address(vault),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(DummyVault.doFirst.selector, 123)
+        });
+
+        // Saving an attestation should fail because there is an active and unfinished attestation.
+        batch[1] = IEVC.BatchItem({
+            targetContract: address(validator),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(SecurityValidator.saveAttestation.selector, attestation, attestationSignature)
+        });
+
+        /// Call the second vault function.
+        batch[2] = IEVC.BatchItem({
+            targetContract: address(vault),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(DummyVault.doSecond.selector, 456)
+        });
+
+        vm.expectRevert();
+        vm.broadcast(userPrivateKey);
+        evc.batch(batch);
+    }
+
+    function test_attestedEVCBatch_saveAfterFinished() public {
+        IEVC.BatchItem[] memory batch = new IEVC.BatchItem[](4);
+
+        /// Save the attestation first.
+        batch[0] = IEVC.BatchItem({
+            targetContract: address(validator),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(SecurityValidator.saveAttestation.selector, attestation, attestationSignature)
+        });
+
+        /// Call the first vault function.
+        batch[1] = IEVC.BatchItem({
+            targetContract: address(vault),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(DummyVault.doFirst.selector, 123)
+        });
+
+        /// Call the second vault function.
+        batch[2] = IEVC.BatchItem({
+            targetContract: address(vault),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(DummyVault.doSecond.selector, 456)
+        });
+
+        // Save the attestation again - it should work since the previous was fully consumed.
+        batch[3] = IEVC.BatchItem({
+            targetContract: address(validator),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(SecurityValidator.saveAttestation.selector, attestation, attestationSignature)
+        });
+
+        vm.broadcast(userPrivateKey);
         evc.batch(batch);
     }
 
