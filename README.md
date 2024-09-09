@@ -1,4 +1,4 @@
-## Forta Security Contracts
+## Forta Firewall Contracts
 
 ## Deployment
 
@@ -15,18 +15,11 @@ then do
 make deploy
 ```
 
-## How to use the contract addresses
+or
 
-You can see the addresses in the script logs like:
+```sh
+make deploy-firewall
 ```
-== Logs ==
-  validator contract: 0x629DEA308296c5b8e65a376cD0181658CAA2Ed4A
-  policy contract: 0xa6FF2BEefB48b0489f4e587D529F9ce6439AFEfe
-```
-
-The validator contract address and the deployed chain RPC needs to be provided to the attester in the same request which the user tx/op is sent for screening.
-
-The policy contract is the one which takes the checkpoint execution requests. The protocol contract that defines checkpoint hashes must make calls to the policy contract to execute them.
 
 ## Quick Forge reference
 
