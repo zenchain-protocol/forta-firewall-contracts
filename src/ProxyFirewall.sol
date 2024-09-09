@@ -5,13 +5,14 @@ import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IFirewall, Firewall} from "./Firewall.sol";
+import {IFirewall, ICheckpointHook, Firewall} from "./Firewall.sol";
 import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
 
 interface IProxyFirewall is IFirewall {
     function initializeFirewallConfig(
         ISecurityValidator _validator,
+        ICheckpointHook _checkpointHook,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) external;
@@ -64,10 +65,11 @@ contract ProxyFirewall is IProxyFirewall, Firewall, Proxy, Multicall {
      */
     function initializeFirewallConfig(
         ISecurityValidator _validator,
+        ICheckpointHook _checkpointHook,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) public initializer {
-        _updateFirewallConfig(_validator, _attesterControllerId, _firewallAccess);
+        _updateFirewallConfig(_validator, _checkpointHook, _attesterControllerId, _firewallAccess);
     }
 
     /**

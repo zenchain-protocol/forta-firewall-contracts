@@ -5,7 +5,7 @@ import {Test, console, Vm} from "forge-std/Test.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IProxyFirewall, ProxyFirewall} from "../src/ProxyFirewall.sol";
-import {Checkpoint, Activation} from "../src/Firewall.sol";
+import {Checkpoint, Activation, ICheckpointHook} from "../src/Firewall.sol";
 import {
     IFirewallAccess,
     FirewallAccess,
@@ -91,7 +91,10 @@ contract ProxyFirewallTest is Test {
 
         /// Proxy firewall points to the logic contract but that should be on main proxy storage.
         IProxyFirewall(address(mainProxy)).initializeFirewallConfig(
-            ISecurityValidator(address(validator)), bytes32(0), IFirewallAccess(firewallAccess)
+            ISecurityValidator(address(validator)),
+            ICheckpointHook(address(0)),
+            bytes32(0),
+            IFirewallAccess(firewallAccess)
         );
         IProxyFirewall(address(mainProxy)).upgradeNextAndCall(address(logic), upgradeData);
 

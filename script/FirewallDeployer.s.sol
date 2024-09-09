@@ -2,6 +2,7 @@
 pragma solidity ^0.8.25;
 
 import {Script, console} from "forge-std/Script.sol";
+import {ICheckpointHook} from "../src/Firewall.sol";
 import "../src/ExternalFirewall.sol";
 import "../src/SecurityValidator.sol";
 
@@ -39,7 +40,10 @@ contract FirewallDeployerScript is Script {
 
         SecurityValidator validator = new SecurityValidator(address(0));
         ExternalFirewall externalFirewall = new ExternalFirewall(
-            ISecurityValidator(address(validator)), bytes32(0), IFirewallAccess(address(new DummyFirewallAccess()))
+            ISecurityValidator(address(validator)),
+            ICheckpointHook(address(0)),
+            bytes32(0),
+            IFirewallAccess(address(new DummyFirewallAccess()))
         );
         console.log("validator contract:", address(validator));
         console.log("external firewall contract:", address(externalFirewall));

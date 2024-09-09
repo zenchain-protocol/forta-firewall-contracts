@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
-import {Firewall} from "./Firewall.sol";
+import {Firewall, ICheckpointHook} from "./Firewall.sol";
 import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
 
@@ -14,7 +14,12 @@ import {IFirewallAccess} from "./FirewallAccess.sol";
  * setCheckpoint(Checkpoint) function.
  */
 abstract contract InternalFirewall is Firewall, Multicall {
-    constructor(ISecurityValidator _validator, bytes32 _attesterControllerId, IFirewallAccess _firewallAccess) {
-        _updateFirewallConfig(_validator, _attesterControllerId, _firewallAccess);
+    constructor(
+        ISecurityValidator _validator,
+        ICheckpointHook _checkpointHook,
+        bytes32 _attesterControllerId,
+        IFirewallAccess _firewallAccess
+    ) {
+        _updateFirewallConfig(_validator, _checkpointHook, _attesterControllerId, _firewallAccess);
     }
 }

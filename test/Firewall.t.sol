@@ -3,7 +3,7 @@ pragma solidity ^0.8.25;
 
 import {Test, console, Vm} from "forge-std/Test.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {Firewall} from "../src/Firewall.sol";
+import {Firewall, ICheckpointHook, HookResult} from "../src/Firewall.sol";
 import {Checkpoint, Activation} from "../src/Firewall.sol";
 import {
     IFirewallAccess,
@@ -16,8 +16,13 @@ import {ISecurityValidator, Attestation} from "../src/SecurityValidator.sol";
 import {Quantization} from "../src/Quantization.sol";
 
 contract FirewallImpl is Firewall {
-    constructor(ISecurityValidator _validator, bytes32 _attesterControllerId, IFirewallAccess _firewallAccess) {
-        _updateFirewallConfig(_validator, _attesterControllerId, _firewallAccess);
+    constructor(
+        ISecurityValidator _validator,
+        ICheckpointHook _checkpointHook,
+        bytes32 _attesterControllerId,
+        IFirewallAccess _firewallAccess
+    ) {
+        _updateFirewallConfig(_validator, _checkpointHook, _attesterControllerId, _firewallAccess);
     }
 
     function secureExecution(uint256) public {
@@ -25,11 +30,11 @@ contract FirewallImpl is Firewall {
     }
 
     function secureExecutionWithRef(uint256 ref) public {
-        _secureExecution(ref);
+        _secureExecution(msg.sender, msg.sig, ref);
     }
 
     function secureExecutionWithRefAndSelector(bytes4 selector, uint256 ref) public {
-        _secureExecution(selector, ref);
+        _secureExecution(msg.sender, selector, ref);
     }
 }
 
@@ -39,6 +44,7 @@ contract FirewallTest is Test {
     address constant mockValidator = address(uint160(234));
     address constant mockAccess = address(uint160(345));
     address constant testAttester = address(uint160(456));
+    address constant mockHook = address(uint160(567));
 
     FirewallImpl firewall;
 
@@ -46,8 +52,12 @@ contract FirewallTest is Test {
         Checkpoint({threshold: 1, refStart: 2, refEnd: 3, activation: Activation.AlwaysActive, trustedOrigin: true});
 
     function setUp() public {
-        firewall =
-            new FirewallImpl(ISecurityValidator(mockValidator), attesterControllerId, IFirewallAccess(mockAccess));
+        firewall = new FirewallImpl(
+            ISecurityValidator(mockValidator),
+            ICheckpointHook(mockHook),
+            attesterControllerId,
+            IFirewallAccess(mockAccess)
+        );
     }
 
     function testFirewall_setCheckpointWithSelector() public {
@@ -144,6 +154,7 @@ contract FirewallTest is Test {
         address newValidator = address(uint160(777));
         bytes32 newControllerId = bytes32(uint256(888));
         address newAccess = address(uint160(999));
+        address newHook = address(uint160(1010));
 
         /// Refuse access.
         vm.mockCall(
@@ -152,7 +163,9 @@ contract FirewallTest is Test {
             abi.encode(false)
         );
         vm.expectRevert();
-        firewall.updateFirewallConfig(ISecurityValidator(newValidator), newControllerId, IFirewallAccess(newAccess));
+        firewall.updateFirewallConfig(
+            ISecurityValidator(newValidator), ICheckpointHook(newHook), newControllerId, IFirewallAccess(newAccess)
+        );
 
         /// Grant access.
         vm.mockCall(
@@ -160,10 +173,14 @@ contract FirewallTest is Test {
             abi.encodeWithSelector(IFirewallAccess.isFirewallAdmin.selector, address(this)),
             abi.encode(true)
         );
-        firewall.updateFirewallConfig(ISecurityValidator(newValidator), newControllerId, IFirewallAccess(newAccess));
+        firewall.updateFirewallConfig(
+            ISecurityValidator(newValidator), ICheckpointHook(newHook), newControllerId, IFirewallAccess(newAccess)
+        );
 
-        (ISecurityValidator validator, bytes32 controllerId, IFirewallAccess access) = firewall.getFirewallConfig();
+        (ISecurityValidator validator, ICheckpointHook checkpointHook, bytes32 controllerId, IFirewallAccess access) =
+            firewall.getFirewallConfig();
         assertEq(newValidator, address(validator));
+        assertEq(newHook, address(checkpointHook));
         assertEq(newControllerId, controllerId);
         assertEq(newAccess, address(access));
     }
@@ -197,6 +214,13 @@ contract FirewallTest is Test {
             address(mockAccess),
             abi.encodeWithSelector(IFirewallAccess.isTrustedAttester.selector, address(testAttester)),
             abi.encode(true)
+        );
+        vm.mockCall(
+            address(mockHook),
+            abi.encodeWithSelector(
+                ICheckpointHook.handleCheckpoint.selector, address(this), FirewallImpl.secureExecution.selector, arg
+            ),
+            abi.encode(HookResult.Inconclusive)
         );
         vm.mockCall(
             address(mockValidator),
@@ -240,6 +264,16 @@ contract FirewallTest is Test {
             abi.encode(true)
         );
         vm.mockCall(
+            address(mockHook),
+            abi.encodeWithSelector(
+                ICheckpointHook.handleCheckpoint.selector,
+                address(this),
+                FirewallImpl.secureExecutionWithRef.selector,
+                arg
+            ),
+            abi.encode(HookResult.Inconclusive)
+        );
+        vm.mockCall(
             address(mockValidator),
             abi.encodeWithSelector(ISecurityValidator.executeCheckpoint.selector, checkpointHash),
             abi.encode(keccak256(abi.encode(checkpointHash, address(firewall), bytes32(0))))
@@ -275,10 +309,97 @@ contract FirewallTest is Test {
             abi.encode(true)
         );
         vm.mockCall(
+            address(mockHook),
+            abi.encodeWithSelector(ICheckpointHook.handleCheckpoint.selector, address(this), bytes4(0xaaaaaaaa), arg),
+            abi.encode(HookResult.Inconclusive)
+        );
+        vm.mockCall(
             address(mockValidator),
             abi.encodeWithSelector(ISecurityValidator.executeCheckpoint.selector, checkpointHash),
             abi.encode(keccak256(abi.encode(checkpointHash, address(firewall), bytes32(0))))
         );
         firewall.secureExecutionWithRefAndSelector(0xaaaaaaaa, arg);
+    }
+
+    function testFirewall_hookForceActivation() public {
+        vm.mockCall(
+            address(mockAccess),
+            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
+            abi.encode(true)
+        );
+        Checkpoint memory chk = Checkpoint({
+            threshold: 2,
+            refStart: 4,
+            refEnd: 36,
+            activation: Activation.ConstantThreshold,
+            trustedOrigin: false
+        });
+        firewall.setCheckpoint(FirewallImpl.secureExecution.selector, chk);
+        uint256 arg = 3;
+        bytes32 checkpointHash = keccak256(
+            abi.encode(
+                address(this), address(firewall), FirewallImpl.secureExecution.selector, Quantization.quantize(arg)
+            )
+        );
+        vm.mockCall(
+            address(mockValidator),
+            abi.encodeWithSelector(ISecurityValidator.getCurrentAttester.selector),
+            abi.encode(testAttester)
+        );
+        vm.mockCall(
+            address(mockAccess),
+            abi.encodeWithSelector(IFirewallAccess.isTrustedAttester.selector, address(testAttester)),
+            abi.encode(true)
+        );
+        vm.mockCall(
+            address(mockHook),
+            abi.encodeWithSelector(
+                ICheckpointHook.handleCheckpoint.selector, address(this), FirewallImpl.secureExecution.selector, arg
+            ),
+            abi.encode(HookResult.ForceActivation)
+        );
+        /// Validator call is done as usual.
+        vm.mockCall(
+            address(mockValidator),
+            abi.encodeWithSelector(ISecurityValidator.executeCheckpoint.selector, checkpointHash),
+            abi.encode(keccak256(abi.encode(checkpointHash, address(firewall), bytes32(0))))
+        );
+        firewall.secureExecution(arg);
+    }
+
+    function testFirewall_hookForceDeactivation() public {
+        vm.mockCall(
+            address(mockAccess),
+            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
+            abi.encode(true)
+        );
+        Checkpoint memory chk = Checkpoint({
+            threshold: 2,
+            refStart: 4,
+            refEnd: 36,
+            activation: Activation.ConstantThreshold,
+            trustedOrigin: false
+        });
+        firewall.setCheckpoint(FirewallImpl.secureExecution.selector, chk);
+        uint256 arg = 3;
+        vm.mockCall(
+            address(mockValidator),
+            abi.encodeWithSelector(ISecurityValidator.getCurrentAttester.selector),
+            abi.encode(testAttester)
+        );
+        vm.mockCall(
+            address(mockAccess),
+            abi.encodeWithSelector(IFirewallAccess.isTrustedAttester.selector, address(testAttester)),
+            abi.encode(true)
+        );
+        vm.mockCall(
+            address(mockHook),
+            abi.encodeWithSelector(
+                ICheckpointHook.handleCheckpoint.selector, address(this), FirewallImpl.secureExecution.selector, arg
+            ),
+            abi.encode(HookResult.ForceDeactivation)
+        );
+        /// No validator call!
+        firewall.secureExecution(arg);
     }
 }

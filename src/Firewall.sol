@@ -57,6 +57,7 @@ enum Activation {
 interface IFirewall {
     function updateFirewallConfig(
         ISecurityValidator _validator,
+        ICheckpointHook _checkpointHook,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) external;
@@ -64,7 +65,12 @@ interface IFirewall {
     function getFirewallConfig()
         external
         view
-        returns (ISecurityValidator _validator, bytes32 _attesterControllerId, IFirewallAccess _firewallAccess);
+        returns (
+            ISecurityValidator _validator,
+            ICheckpointHook _checkpointHook,
+            bytes32 _attesterControllerId,
+            IFirewallAccess _firewallAccess
+        );
 
     function setCheckpoint(string memory funcSig, Checkpoint memory checkpoint) external;
 
@@ -85,6 +91,17 @@ interface IAttesterInfo {
     event AttesterControllerUpdated(bytes32 attesterControllerId);
 
     function getAttesterControllerId() external view returns (bytes32);
+}
+
+enum HookResult {
+    Inconclusive,
+    ForceActivation,
+    ForceDeactivation
+}
+
+/// @notice An interface to support custom configurations per executed checkpoint.
+interface ICheckpointHook {
+    function handleCheckpoint(address caller, bytes4 selector, uint256 ref) external view returns (HookResult);
 }
 
 /**
@@ -110,6 +127,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
 
     struct FirewallStorage {
         ISecurityValidator validator;
+        ICheckpointHook checkpointHook;
         bytes32 attesterControllerId;
         mapping(bytes4 => Checkpoint) checkpoints;
     }
@@ -120,22 +138,25 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     /**
      * @notice Updates the firewall config.
      * @param _validator Validator used for checkpoint execution calls.
+     * @param _checkpointHook Checkpoint hook contract which is called before every checkpoint.
      * @param _attesterControllerId The ID of the external controller which keeps settings related
      * to the attesters.
      * @param _firewallAccess Firewall access controller.
      */
     function updateFirewallConfig(
         ISecurityValidator _validator,
+        ICheckpointHook _checkpointHook,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) public virtual onlyFirewallAdmin {
-        _updateFirewallConfig(_validator, _attesterControllerId, _firewallAccess);
+        _updateFirewallConfig(_validator, _checkpointHook, _attesterControllerId, _firewallAccess);
     }
 
     /**
      * @notice Initializes the firewall config for the first time.
      * @param _validator The security validator which the firewall calls for saving
      * the attestation and executing checkpoints.
+     * @param _checkpointHook Checkpoint hook contract which is called before every checkpoint.
      * @param _attesterControllerId The id of the controller that lives on Forta chain. Attesters
      * regards this value to find out the settings for this contract before creating an attestation.
      * @param _firewallAccess The access control contract that knows the accounts which can manage
@@ -143,11 +164,13 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
      */
     function _updateFirewallConfig(
         ISecurityValidator _validator,
+        ICheckpointHook _checkpointHook,
         bytes32 _attesterControllerId,
         IFirewallAccess _firewallAccess
     ) internal virtual {
         FirewallStorage storage $ = _getFirewallStorage();
         $.validator = _validator;
+        $.checkpointHook = _checkpointHook;
         $.attesterControllerId = _attesterControllerId;
         _updateFirewallAccess(_firewallAccess);
         emit SecurityConfigUpdated(_validator, _firewallAccess);
@@ -158,6 +181,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
      * @notice Returns the firewall configuration.
      * @return validator The security validator which the firewall calls for saving
      * the attestation and executing checkpoints.
+     * @return checkpointHook Checkpoint hook contract which is called before every checkpoint.
      * @return attesterControllerId The id of the controller that lives on Forta chain. Attesters
      * regards this value to find out the settings for this contract before creating an attestation.
      * @return firewallAccess The access control contract that knows the accounts which can manage
@@ -166,11 +190,16 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     function getFirewallConfig()
         public
         view
-        returns (ISecurityValidator validator, bytes32 attesterControllerId, IFirewallAccess firewallAccess)
+        returns (
+            ISecurityValidator validator,
+            ICheckpointHook checkpointHook,
+            bytes32 attesterControllerId,
+            IFirewallAccess firewallAccess
+        )
     {
         FirewallStorage storage $ = _getFirewallStorage();
         firewallAccess = _getFirewallAccess();
-        return ($.validator, $.attesterControllerId, firewallAccess);
+        return ($.validator, $.checkpointHook, $.attesterControllerId, firewallAccess);
     }
 
     /**
@@ -279,17 +308,13 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[msg.sig];
         bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
         uint256 ref = uint256(bytes32(byteRange));
-        _secureExecution(ref);
+        _secureExecution(msg.sender, msg.sig, ref);
     }
 
-    function _secureExecution(uint256 ref) internal virtual {
-        return _secureExecution(msg.sig, ref);
-    }
-
-    function _secureExecution(bytes4 selector, uint256 ref) internal virtual {
+    function _secureExecution(address caller, bytes4 selector, uint256 ref) internal virtual {
         Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[selector];
         bool ok;
-        (ref, ok) = _checkpointActivated(selector, ref, checkpoint);
+        (ref, ok) = _checkpointActivated(caller, selector, ref, checkpoint);
         if (ok) _executeCheckpoint(ref, selector, checkpoint.trustedOrigin);
     }
 
@@ -316,10 +341,17 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         $.validator.executeCheckpoint(keccak256(abi.encode(msg.sender, address(this), selector, ref.quantize())));
     }
 
-    function _checkpointActivated(bytes4 selector, uint256 ref, Checkpoint storage checkpoint)
+    function _checkpointActivated(address caller, bytes4 selector, uint256 ref, Checkpoint storage checkpoint)
         private
         returns (uint256, bool)
     {
+        ICheckpointHook checkpointHook = _getFirewallStorage().checkpointHook;
+        if (address(checkpointHook) != address(0)) {
+            HookResult result = checkpointHook.handleCheckpoint(caller, selector, ref);
+            if (result == HookResult.ForceActivation) return (ref, true);
+            if (result == HookResult.ForceDeactivation) return (ref, false);
+            // Otherwise, just keep on with default checkpoint configuration and logic.
+        }
         if (checkpoint.activation == Activation.Inactive) return (ref, false);
         if (checkpoint.activation == Activation.AlwaysBlocked) revert CheckpointBlocked();
         if (checkpoint.activation == Activation.AlwaysActive) return (1, true); // special case: simplify ref for checkpoint stability

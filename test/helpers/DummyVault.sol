@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 import "evc/interfaces/IVault.sol";
-import {Checkpoint, Activation} from "../../src/Firewall.sol";
+import {Checkpoint, Activation, ICheckpointHook} from "../../src/Firewall.sol";
 import {InternalFirewall} from "../../src/InternalFirewall.sol";
 import {ISecurityValidator} from "../../src/SecurityValidator.sol";
 import {IFirewallAccess} from "../../src/FirewallAccess.sol";
@@ -34,7 +34,9 @@ interface IDummyVault {
 }
 
 contract DummyVault is IVault, IDummyVault, InternalFirewall {
-    constructor(ISecurityValidator _validator) InternalFirewall(_validator, bytes32(0), _initSecurityAccess()) {
+    constructor(ISecurityValidator _validator)
+        InternalFirewall(_validator, ICheckpointHook(address(0)), bytes32(0), _initSecurityAccess())
+    {
         Checkpoint memory checkpoint;
         checkpoint.threshold = 0;
         checkpoint.refStart = 4;
@@ -60,10 +62,10 @@ contract DummyVault is IVault, IDummyVault, InternalFirewall {
     }
 
     function doFirst(uint256 amount) public {
-        _secureExecution(amount);
+        _secureExecution(msg.sender, msg.sig, amount);
     }
 
     function doSecond(uint256 amount) public {
-        _secureExecution(amount);
+        _secureExecution(msg.sender, msg.sig, amount);
     }
 }
