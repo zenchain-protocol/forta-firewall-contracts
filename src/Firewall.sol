@@ -226,6 +226,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
      * @param checkpoint Checkpoint data.
      */
     function setCheckpoint(bytes4 selector, Checkpoint memory checkpoint) public virtual onlyCheckpointManager {
+        require(checkpoint.refStart <= checkpoint.refEnd, "refStart is larger than refEnd");
         _getFirewallStorage().checkpoints[selector] = checkpoint;
     }
 
@@ -306,6 +307,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
 
     function _secureExecution() internal virtual {
         Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[msg.sig];
+        require(checkpoint.refEnd <= msg.data.length, "refEnd too large for slicing");
         bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
         uint256 ref = uint256(bytes32(byteRange));
         _secureExecution(msg.sender, msg.sig, ref);

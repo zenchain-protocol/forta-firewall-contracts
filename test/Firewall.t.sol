@@ -146,6 +146,18 @@ contract FirewallTest is Test {
         firewall.setCheckpointActivation("foo()", Activation.AlwaysBlocked);
     }
 
+    function testFirewall_setCheckpointInvalidRefRange() public {
+        vm.mockCall(
+            address(mockAccess),
+            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
+            abi.encode(true)
+        );
+        checkpoint.refStart = 2;
+        checkpoint.refEnd = 1;
+        vm.expectRevert();
+        firewall.setCheckpoint(0xaaaaaaaa, checkpoint);
+    }
+
     function testFirewall_getAttesterControllerId() public view {
         assertEq(attesterControllerId, firewall.getAttesterControllerId());
     }
