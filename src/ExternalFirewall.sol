@@ -7,7 +7,7 @@ import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
 
 interface IExternalFirewall {
-    function executeCheckpoint(bytes4 selector, uint256 ref) external;
+    function executeCheckpoint(address caller, bytes4 selector, uint256 ref) external;
 }
 
 /**

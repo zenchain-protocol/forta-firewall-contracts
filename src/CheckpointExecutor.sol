@@ -27,7 +27,7 @@ abstract contract CheckpointExecutor {
         assembly {
             $.slot := STORAGE_SLOT
         }
-        IExternalFirewall($.externalFirewall).executeCheckpoint(selector, ref);
+        IExternalFirewall($.externalFirewall).executeCheckpoint(msg.sender, selector, ref);
     }
 
     /**
