@@ -174,6 +174,61 @@ contract EVCTest is Test {
         evc.batch(batch);
     }
 
+    function test_attestedEVCBatch_storeSaveExecute() public {
+        vm.broadcast(userPrivateKey);
+        /// Store the attestation in the first transaction.
+        validator.storeAttestation(attestation, attestationSignature);
+
+        IEVC.BatchItem[] memory batch = new IEVC.BatchItem[](5);
+
+        /// Exclude the attestation from the batch.
+
+        /// Save the attestation first.
+        batch[0] = IEVC.BatchItem({
+            targetContract: address(validator),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(SecurityValidator.saveAttestation.selector, attestation, attestationSignature)
+        });
+
+        /// Call the first vault function.
+        batch[1] = IEVC.BatchItem({
+            targetContract: address(vault),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(DummyVault.doFirst.selector, 123)
+        });
+
+        /// Call the second vault function.
+        batch[2] = IEVC.BatchItem({
+            targetContract: address(vault),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(DummyVault.doSecond.selector, 456)
+        });
+
+        /// Call the first vault function again.
+        batch[3] = IEVC.BatchItem({
+            targetContract: address(vault),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(DummyVault.doFirst.selector, 123)
+        });
+
+        /// Call the second vault function again.
+        batch[4] = IEVC.BatchItem({
+            targetContract: address(vault),
+            onBehalfOfAccount: user,
+            value: 0,
+            data: abi.encodeWithSelector(DummyVault.doSecond.selector, 456)
+        });
+
+        /// Send the batch - it should be able to use the attestation in the batch and then
+        /// from the first tx.
+        vm.broadcast(userPrivateKey);
+        evc.batch(batch);
+    }
+
     function test_attestedEVCBatch_twoTx_overwrite() public {
         /// Store the attestation in the first transaction.
         vm.broadcast(userPrivateKey);
