@@ -85,6 +85,9 @@ interface IFirewall {
     function getCheckpoint(bytes4 selector) external view returns (uint192, uint16, uint16, Activation, bool);
 
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
+
+    function attestedCall(Attestation calldata attestation, bytes calldata attestationSignature, bytes calldata data)
+        external;
 }
 
 interface IAttesterInfo {
