@@ -181,7 +181,7 @@ contract EVCTest is Test {
 
         IEVC.BatchItem[] memory batch = new IEVC.BatchItem[](5);
 
-        /// Exclude the attestation from the batch.
+        /// Inlcude the same attestation in the batch and execute real batch items twice.
 
         /// Save the attestation first.
         batch[0] = IEVC.BatchItem({
