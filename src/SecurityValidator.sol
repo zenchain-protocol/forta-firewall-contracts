@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.25;
 
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
-import "@openzeppelin/contracts/metatx/ERC2771Context.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 
 address constant BYPASS_FLAG = 0x0000000000000000000000000000000000f01274; // "forta" in leetspeak
