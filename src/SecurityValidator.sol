@@ -74,7 +74,7 @@ contract SecurityValidator is EIP712, ERC2771Context {
      * @notice A mapping from transaction senders to first execution hashes and to attestations.
      * This is useful for storing an attestation in a previous transaction safely.
      */
-    mapping(address => mapping(bytes32 => StoredAttestation)) attestations;
+    mapping(address origin => mapping(bytes32 firstExecutionHash => StoredAttestation attestation)) attestations;
 
     constructor(address _trustedForwarder) EIP712("SecurityValidator", "1") ERC2771Context(_trustedForwarder) {}
 

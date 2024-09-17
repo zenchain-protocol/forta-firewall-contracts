@@ -129,7 +129,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         ISecurityValidator validator;
         ICheckpointHook checkpointHook;
         bytes32 attesterControllerId;
-        mapping(bytes4 => Checkpoint) checkpoints;
+        mapping(bytes4 funcSelector => Checkpoint checkpoint) checkpoints;
     }
 
     /// @custom:storage-location erc7201:forta.Firewall.storage
