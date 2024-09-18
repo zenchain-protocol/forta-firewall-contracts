@@ -72,15 +72,9 @@ interface IFirewall {
             IFirewallAccess _firewallAccess
         );
 
-    function setCheckpoint(string memory funcSig, Checkpoint memory checkpoint) external;
-
     function setCheckpoint(bytes4 selector, Checkpoint memory checkpoint) external;
 
-    function setCheckpointActivation(string memory funcSig, Activation activation) external;
-
     function setCheckpointActivation(bytes4 selector, Activation activation) external;
-
-    function getCheckpoint(string memory funcSig) external view returns (uint192, uint16, uint16, Activation, bool);
 
     function getCheckpoint(bytes4 selector) external view returns (uint192, uint16, uint16, Activation, bool);
 
@@ -210,16 +204,6 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     }
 
     /**
-     * @notice Sets checkpoint values for given function signature, call data byte range
-     * and with given threshold type.
-     * @param funcSig Signature of the function.
-     * @param checkpoint Checkpoint data.
-     */
-    function setCheckpoint(string memory funcSig, Checkpoint memory checkpoint) public virtual onlyCheckpointManager {
-        setCheckpoint(_toSelector(funcSig), checkpoint);
-    }
-
-    /**
      * @notice Sets checkpoint values for given function selector, call data byte range
      * and with given threshold type.
      * @param selector Selector of the function.
@@ -232,37 +216,11 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
 
     /**
      * @notice Sets the checkpoint activation type.
-     * @param funcSig Signature of the function.
-     * @param activation Activation type.
-     */
-    function setCheckpointActivation(string memory funcSig, Activation activation)
-        public
-        virtual
-        onlyCheckpointManager
-    {
-        return setCheckpointActivation(_toSelector(funcSig), activation);
-    }
-
-    /**
-     * @notice Sets the checkpoint activation type.
      * @param selector Selector of the function.
      * @param activation Activation type.
      */
     function setCheckpointActivation(bytes4 selector, Activation activation) public virtual onlyCheckpointManager {
         _getFirewallStorage().checkpoints[selector].activation = activation;
-    }
-
-    /**
-     * @notice Gets the checkpoint values for given function signature.
-     * @param funcSig Signature of the function.
-     */
-    function getCheckpoint(string memory funcSig)
-        public
-        view
-        virtual
-        returns (uint192, uint16, uint16, Activation, bool)
-    {
-        return getCheckpoint(_toSelector(funcSig));
     }
 
     /**
@@ -373,9 +331,5 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         assembly {
             $.slot := STORAGE_SLOT
         }
-    }
-
-    function _toSelector(string memory funcSig) private pure returns (bytes4) {
-        return bytes4(keccak256(bytes(funcSig)));
     }
 }
