@@ -230,7 +230,7 @@ contract SecurityValidator is ISecurityValidator, EIP712, ERC2771Context {
         StoredAttestation storage storedAttestation = attestations[tx.origin][executionHash];
         if (storedAttestation.attestation.deadline == 0) revert AttestationNotFound();
         _initAttestation(storedAttestation.attestation, storedAttestation.attester);
-        delete(attestations[tx.origin][executionHash]);
+        delete attestations[tx.origin][executionHash];
     }
 
     function _idleOrDone() internal view returns (bool) {
