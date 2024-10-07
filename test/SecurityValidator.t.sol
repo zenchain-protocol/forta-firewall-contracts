@@ -366,7 +366,7 @@ contract EVCTest is Test {
 
         vm.broadcast(userPrivateKey);
         bytes32 expectedHash = 0x8eef2e46cd1e7ae75ac414283c677c544c34901ed90ce97905ebb9b4a87052b3;
-        bytes32 computedHash = 0xa9410fd8f9e8b60e09d09845e17c97397dcf217bf8a6320851eabf6cb19a5baf;
+        bytes32 computedHash = 0xf4d3d83bdd1b97c9589d4ccd592ea9ab7e410543838022b48bf8ddb1292b6a6e;
         vm.expectRevert(
             abi.encodeWithSelector(
                 SecurityValidator.InvalidExecutionHash.selector, address(validator), expectedHash, computedHash
