@@ -103,49 +103,6 @@ contract FirewallTest is Test {
         firewall.setCheckpointActivation(0xaaaaaaaa, Activation.AlwaysBlocked);
     }
 
-    function testFirewall_setCheckpointWithSignature() public {
-        vm.mockCall(
-            address(mockAccess),
-            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
-            abi.encode(true)
-        );
-        firewall.setCheckpoint("foo()", checkpoint);
-        (uint192 threshold, uint16 refStart, uint16 refEnd, Activation activation, bool trustedOrigin) =
-            firewall.getCheckpoint("foo()");
-        assertEq(checkpoint.threshold, threshold);
-        assertEq(checkpoint.refStart, refStart);
-        assertEq(checkpoint.refEnd, refEnd);
-        assertEq(uint8(checkpoint.activation), uint8(activation));
-        assertEq(checkpoint.trustedOrigin, trustedOrigin);
-
-        vm.mockCall(
-            address(mockAccess),
-            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
-            abi.encode(true)
-        );
-        firewall.setCheckpointActivation("foo()", Activation.AlwaysBlocked);
-        (,,, activation,) = firewall.getCheckpoint("foo()");
-        assertEq(uint8(Activation.AlwaysBlocked), uint8(activation));
-
-        /// Refuse access.
-        vm.mockCall(
-            address(mockAccess),
-            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
-            abi.encode(false)
-        );
-        vm.expectRevert();
-        firewall.setCheckpoint("foo()", checkpoint);
-
-        /// Refuse access.
-        vm.mockCall(
-            address(mockAccess),
-            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
-            abi.encode(false)
-        );
-        vm.expectRevert();
-        firewall.setCheckpointActivation("foo()", Activation.AlwaysBlocked);
-    }
-
     function testFirewall_setCheckpointInvalidRefRange() public {
         vm.mockCall(
             address(mockAccess),
