@@ -63,11 +63,11 @@ contract SecurityValidator is ISecurityValidator, EIP712, ERC2771Context {
      * @notice Transient storage slots used for storing the attestation values
      * and executing checkpoints
      */
-    bytes32 constant ATTESTER_SLOT = bytes32(uint256(0));
-    bytes32 constant HASH_SLOT = bytes32(uint256(1));
-    bytes32 constant HASH_COUNT_SLOT = bytes32(uint256(2));
-    bytes32 constant HASH_CACHE_INDEX_SLOT = bytes32(uint256(3));
-    uint256 constant HASH_CACHE_START_SLOT = 4;
+    bytes32 private constant ATTESTER_SLOT = bytes32(uint256(0));
+    bytes32 private constant HASH_SLOT = bytes32(uint256(1));
+    bytes32 private constant HASH_COUNT_SLOT = bytes32(uint256(2));
+    bytes32 private constant HASH_CACHE_INDEX_SLOT = bytes32(uint256(3));
+    uint256 private constant HASH_CACHE_START_SLOT = 4;
 
     /// @notice Used for EIP-712 message hash calculation
     bytes32 private constant _ATTESTATION_TYPEHASH =
@@ -77,7 +77,7 @@ contract SecurityValidator is ISecurityValidator, EIP712, ERC2771Context {
      * @notice A mapping from transaction senders to first execution hashes and to attestations.
      * This is useful for storing an attestation in a previous transaction safely.
      */
-    mapping(address origin => mapping(bytes32 firstExecutionHash => StoredAttestation attestation)) attestations;
+    mapping(address origin => mapping(bytes32 firstExecutionHash => StoredAttestation attestation)) private attestations;
 
     constructor(address _trustedForwarder) EIP712("SecurityValidator", "1") ERC2771Context(_trustedForwarder) {}
 
