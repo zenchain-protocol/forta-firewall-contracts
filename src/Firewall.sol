@@ -332,6 +332,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
             }
         }
         /// Otherwise, fall back to the checkpoint execution.
+        $.validator.executeCheckpoint(keccak256(abi.encode(msg.sender, address(this), selector, ref.quantize())));
 
         /// Ensure first that the current attester can be trusted.
         /// If the current attester is zero address, let the security validator deal with that.
@@ -339,8 +340,6 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         if (currentAttester != address(0) && !_isTrustedAttester(currentAttester)) {
             revert UntrustedAttester(currentAttester);
         }
-
-        $.validator.executeCheckpoint(keccak256(abi.encode(msg.sender, address(this), selector, ref.quantize())));
     }
 
     function _checkpointActivated(address caller, bytes4 selector, uint256 ref, Checkpoint storage checkpoint)
