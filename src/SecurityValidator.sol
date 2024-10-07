@@ -32,6 +32,11 @@ struct StoredAttestation {
 interface ISecurityValidator {
     function hashAttestation(Attestation calldata attestation) external view returns (bytes32);
     function getCurrentAttester() external view returns (address);
+    function validateFinalState() external view;
+    function executionHashFrom(bytes32 checkpointHash, address caller, bytes32 executionHash)
+        external
+        pure
+        returns (bytes32);
 
     function storeAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
@@ -44,7 +49,7 @@ interface ISecurityValidator {
  * @notice A singleton to be used by attesters to enable execution and contracts to ensure
  * that execution was enabled by an attester.
  */
-contract SecurityValidator is EIP712, ERC2771Context {
+contract SecurityValidator is ISecurityValidator, EIP712, ERC2771Context {
     using StorageSlot for bytes32;
 
     error AttestationOverwrite();
