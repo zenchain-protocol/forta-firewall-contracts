@@ -32,6 +32,11 @@ struct StoredAttestation {
 interface ISecurityValidator {
     function hashAttestation(Attestation calldata attestation) external view returns (bytes32);
     function getCurrentAttester() external view returns (address);
+    function validateFinalState() external view;
+    function executionHashFrom(bytes32 checkpointHash, address caller, bytes32 executionHash)
+        external
+        pure
+        returns (bytes32);
 
     function storeAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
     function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
@@ -44,12 +49,11 @@ interface ISecurityValidator {
  * @notice A singleton to be used by attesters to enable execution and contracts to ensure
  * that execution was enabled by an attester.
  */
-contract SecurityValidator is EIP712, ERC2771Context {
+contract SecurityValidator is ISecurityValidator, EIP712, ERC2771Context {
     using StorageSlot for bytes32;
 
     error AttestationOverwrite();
     error AttestationDeadlineExceeded();
-    error AttestationRequired();
     error HashCountExceeded(uint256 atIndex);
     error InvalidExecutionHash(address validator, bytes32 expectedHash, bytes32 computedHash);
     error InvalidAttestation();
@@ -150,20 +154,24 @@ contract SecurityValidator is EIP712, ERC2771Context {
         bytes32 executionHash = StorageSlot.tload(HASH_SLOT.asBytes32());
         executionHash = executionHashFrom(checkpointHash, msg.sender, executionHash);
 
-        /// If there is no attestation and the bypass flag is not used,
+        /// If there is there is no actively used attestation and the bypass flag is not used,
         /// then the transaction should revert.
         bool bypassed;
         if (getCurrentAttester() == address(0)) {
-            /// Can't have zero balance - see the constructor.
             /// This can be set to zero from the trace state override.
+            /// Doing the expensive read after making sure that the attester in transient storage
+            /// is empty.
             bypassed = BYPASS_FLAG.code.length > 0;
-            if (!bypassed) {
-                /// In case the attestation was delivered in a previous transaction, it should
-                /// be loaded from here.
-                bool ok = _tryInitAttestationFromStorage(executionHash);
-                /// No attestations from current tx or previous: revert
-                if (!ok) revert AttestationRequired();
-            }
+        }
+
+        // Avoid reentrancy or double init: Make sure that we are starting from a
+        // zero state or after a previous attestation has been used.
+        if (_idleOrDone() && !bypassed) {
+            /// In case the attestation was delivered in a previous transaction, it should
+            /// be loaded from here. It can be referenced by producing the first execution hash.
+            executionHash = executionHashFrom(checkpointHash, msg.sender, bytes32(0));
+            _tryInitAttestationFromStorage(executionHash);
+            /// At this point, it is safe to continue with the first execution hash produced above.
         }
 
         uint256 cacheIndex = StorageSlot.tload(HASH_CACHE_INDEX_SLOT.asUint256());
@@ -218,16 +226,11 @@ contract SecurityValidator is EIP712, ERC2771Context {
         }
     }
 
-    function _tryInitAttestationFromStorage(bytes32 executionHash) internal returns (bool) {
-        // Avoid reentrancy or double init: Make sure that we are starting from a
-        // zero state or after a previous attestation has been used.
-        if (!_idleOrDone()) return false;
-
+    function _tryInitAttestationFromStorage(bytes32 executionHash) internal {
         StoredAttestation storage storedAttestation = attestations[tx.origin][executionHash];
         if (storedAttestation.attestation.deadline == 0) revert AttestationNotFound();
         _initAttestation(storedAttestation.attestation, storedAttestation.attester);
         delete attestations[tx.origin][executionHash];
-        return true;
     }
 
     function _idleOrDone() internal view returns (bool) {
