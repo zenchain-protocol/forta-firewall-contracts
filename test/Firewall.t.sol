@@ -242,6 +242,52 @@ contract FirewallTest is Test {
         firewall.secureExecution(arg);
     }
 
+    function testFirewall_secureExecutionLargeRange() public {
+        vm.mockCall(
+            address(mockAccess),
+            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
+            abi.encode(true)
+        );
+        Checkpoint memory chk = Checkpoint({
+            threshold: 2,
+            /// The data range below is larger than 32.
+            refStart: 0,
+            refEnd: 36,
+            activation: Activation.ConstantThreshold,
+            trustedOrigin: false
+        });
+        firewall.setCheckpoint(FirewallImpl.secureExecution.selector, chk);
+        uint256 arg = 3;
+        /// Should use a hash input instead of quantized reference.
+        bytes32 checkpointHashInput = keccak256(abi.encodeWithSelector(firewall.secureExecution.selector, arg));
+        bytes32 checkpointHash = keccak256(
+            abi.encode(address(this), address(firewall), FirewallImpl.secureExecution.selector, checkpointHashInput)
+        );
+        vm.mockCall(
+            address(mockValidator),
+            abi.encodeWithSelector(ISecurityValidator.getCurrentAttester.selector),
+            abi.encode(testAttester)
+        );
+        vm.mockCall(
+            address(mockAccess),
+            abi.encodeWithSelector(IFirewallAccess.isTrustedAttester.selector, address(testAttester)),
+            abi.encode(true)
+        );
+        vm.mockCall(
+            address(mockHook),
+            abi.encodeWithSelector(
+                ICheckpointHook.handleCheckpoint.selector, address(this), FirewallImpl.secureExecution.selector, arg
+            ),
+            abi.encode(HookResult.Inconclusive)
+        );
+        vm.mockCall(
+            address(mockValidator),
+            abi.encodeWithSelector(ISecurityValidator.executeCheckpoint.selector, checkpointHash),
+            abi.encode(keccak256(abi.encode(checkpointHash, address(firewall), bytes32(0))))
+        );
+        firewall.secureExecution(arg);
+    }
+
     function testFirewall_secureExecutionWithRef() public {
         vm.mockCall(
             address(mockAccess),
