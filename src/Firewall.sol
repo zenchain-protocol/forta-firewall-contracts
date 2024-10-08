@@ -79,7 +79,8 @@ interface IFirewall {
     function getCheckpoint(bytes4 selector) external view returns (uint192, uint16, uint16, Activation, bool);
 
     function attestedCall(Attestation calldata attestation, bytes calldata attestationSignature, bytes calldata data)
-        external;
+        external
+        returns (bytes memory);
 }
 
 interface IAttesterInfo {
@@ -247,20 +248,25 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
      */
     function attestedCall(Attestation calldata attestation, bytes calldata attestationSignature, bytes calldata data)
         public
+        returns (bytes memory)
     {
         _getFirewallStorage().validator.saveAttestation(attestation, attestationSignature);
-        Address.functionDelegateCall(address(this), data);
+        return Address.functionDelegateCall(address(this), data);
     }
 
     function _secureExecution() internal virtual {
         Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[msg.sig];
         require(checkpoint.refEnd <= msg.data.length, "refEnd too large for slicing");
-        bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
-        /// Support larger data ranges as direct input hashes instead of deriving a reference.
-        if (checkpoint.refEnd - checkpoint.refStart > 32) {
+        if (msg.sig == 0 || (checkpoint.refEnd == 0 && checkpoint.refStart == 0)) {
+            /// Ether transaction or paid transaction with no ref range: use msg.value as ref
+            _secureExecution(msg.sender, msg.sig, msg.value);
+        } else if (checkpoint.refEnd - checkpoint.refStart > 32) {
+            /// Support larger data ranges as direct input hashes instead of deriving a reference.
+            bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
             bytes32 input = keccak256(byteRange);
             _executeCheckpoint(checkpoint, input, msg.sig);
         } else {
+            bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
             uint256 ref = uint256(bytes32(byteRange));
             _secureExecution(msg.sender, msg.sig, ref);
         }
