@@ -113,7 +113,6 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     using StorageSlot for bytes32;
     using Quantization for uint256;
 
-    error AlreadyInitialized();
     error InvalidThresholdType();
     error UntrustedAttester(address attester);
     error CheckpointBlocked();
