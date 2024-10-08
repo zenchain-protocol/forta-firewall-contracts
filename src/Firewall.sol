@@ -323,7 +323,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         }
         if (checkpoint.activation == Activation.Inactive) return (ref, false);
         if (checkpoint.activation == Activation.AlwaysBlocked) revert CheckpointBlocked();
-        if (checkpoint.activation == Activation.AlwaysActive) return (1, true); // special case: simplify ref for checkpoint stability
+        if (checkpoint.activation == Activation.AlwaysActive) return (ref, true);
         if (checkpoint.activation == Activation.ConstantThreshold) return (ref, ref >= checkpoint.threshold);
         if (checkpoint.activation != Activation.AccumulatedThreshold) {
             revert InvalidThresholdType();

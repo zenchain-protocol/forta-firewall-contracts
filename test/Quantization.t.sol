@@ -12,13 +12,13 @@ contract QuantizationTest is Test {
         console.logBytes32(bytes32(num1));
         uint256 num1q = Quantization.quantize(num1);
         console.logBytes32(bytes32(num1q));
-        assertEq(0x0000000000000000000000000000000000000000000000000000000001000000, num1q);
+        assertEq(0x0000000000000000000000000000000000000000000000000000000001ffffff, num1q);
 
         /// 0x0000000000000000000000000000000000000000000000000000000000989680
         uint256 num2 = 10000000;
         console.logBytes32(bytes32(num2));
         uint256 num2q = Quantization.quantize(num2);
         console.logBytes32(bytes32(num2q));
-        assertEq(0x0000000000000000000000000000000000000000000000000000000000980000, num2q);
+        assertEq(0x000000000000000000000000000000000000000000000000000000000098ffff, num2q);
     }
 }
