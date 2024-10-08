@@ -84,7 +84,7 @@ interface IFirewall {
 }
 
 interface IAttesterInfo {
-    event AttesterControllerUpdated(bytes32 attesterControllerId);
+    event AttesterControllerUpdated(bytes32 indexed attesterControllerId);
 
     function getAttesterControllerId() external view returns (bytes32);
 }
@@ -118,8 +118,8 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     error UntrustedAttester(address attester);
     error CheckpointBlocked();
 
-    event SecurityConfigUpdated(ISecurityValidator validator, IFirewallAccess firewallAccess);
-    event SupportsTrustedOrigin(address);
+    event SecurityConfigUpdated(ISecurityValidator indexed validator, IFirewallAccess indexed firewallAccess);
+    event SupportsTrustedOrigin(address indexed firewall);
 
     struct FirewallStorage {
         ISecurityValidator validator;
