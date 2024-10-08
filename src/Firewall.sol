@@ -106,8 +106,9 @@ interface ICheckpointHook {
  * and makes available internal functions to the child contract in order to help intercept
  * function calls.
  *
- * When a function call is intercepted, one of the arguments is used as a reference to compare
- * with a configured threshold. Exceeding the threshold
+ * When a function call is intercepted, one of the arguments can be used as a reference to compare
+ * with a configured threshold. Exceeding the threshold causes checkpoint execution which requires
+ * a corresponding attestation to be present in the SecurityValidator.
  */
 abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Initializable {
     using StorageSlot for bytes32;
@@ -149,7 +150,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     }
 
     /**
-     * @notice Initializes the firewall config for the first time.
+     * @notice Updates the firewall config.
      * @param _validator The security validator which the firewall calls for saving
      * the attestation and executing checkpoints.
      * @param _checkpointHook Checkpoint hook contract which is called before every checkpoint.

@@ -39,7 +39,7 @@ interface IProxyFirewall is IFirewall {
  * to modify the implementation storage on the proxy, in order to point to the proxy firewall logic.
  * As a next action in the same transaction, the proxy firewall should be pointed to the logic contract.
  * For such upgrade cases, upgradeToAndCall() and upgradeNextAndCall() functions are made available
- * from the proxy firewall and the UUPSUpgradeable contracts, respectively.
+ * from the UUPSUpgradeable and ProxyFirewall contracts, respectively.
  *
  * This contract preserves msg.sender, msg.sig and msg.data because it falls back to doing a DELEGATECALL
  * on the next implementation with the same call data.

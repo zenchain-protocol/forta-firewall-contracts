@@ -7,10 +7,10 @@ import {IFirewallAccess} from "./FirewallAccess.sol";
 
 /**
  * @notice This contract provides firewall functionality through inheritance. The child
- * contract must use the _secureExecution(uint256 ref) function to check checkpoint
+ * contract must use the _secureExecution() function to check checkpoint
  * activation conditions and execute checkpoints. The storage used by the Firewall contract
  * is namespaced and causes no collision. The checkpoints must be adjusted by calling the
- * setCheckpoint(Checkpoint) function.
+ * setCheckpoint() function.
  */
 abstract contract InternalFirewall is Firewall {
     constructor(

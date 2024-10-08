@@ -11,9 +11,9 @@ interface IExternalFirewall {
 
 /**
  * @notice This contract provides firewall functionality externally. The integrator contract
- * should inherit the CheckpointExecutor contract and use the executeCheckpoint(bytes4,uint256)
- * function or the withCheckpoint(uint256) modifier to call this contract. The checkpoints must
- * be adjusted by calling the setCheckpoint(Checkpoint) function.
+ * should inherit the CheckpointExecutor contract and use the _executeCheckpoint()
+ * function to call this contract. The checkpoints must be adjusted by calling the
+ * setCheckpoint() function.
  */
 contract ExternalFirewall is Firewall {
     constructor(
