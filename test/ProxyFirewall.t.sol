@@ -19,6 +19,7 @@ import {Quantization} from "../src/Quantization.sol";
 
 interface ILogicContract {
     function withdrawAmount(uint256 n) external;
+    function payAmount() external payable;
     function getNumber() external view returns (uint256);
 }
 
@@ -29,9 +30,15 @@ contract LogicContract {
         number = n;
     }
 
+    function payAmount() public payable {}
+
     function getNumber() public view returns (uint256) {
         return number;
     }
+
+    fallback() external payable {}
+
+    receive() external payable {}
 }
 
 contract ProxyFirewallTest is Test {
@@ -176,6 +183,42 @@ contract ProxyFirewallTest is Test {
         /// Then, whenever we treat main proxy as any other contract in the chain,
         /// it works because of the fallback mechanism. Every function on the chain
         /// works only on the storage of the main proxy.
+    }
+
+    function testProxyFirewallEtherTx() public {
+        Checkpoint memory zeroSigCheckpoint;
+        zeroSigCheckpoint.threshold = 10;
+        zeroSigCheckpoint.activation = Activation.ConstantThreshold;
+
+        /// Set with ether tx signature (zero).
+        IProxyFirewall(address(mainProxy)).setCheckpoint(0x0, zeroSigCheckpoint);
+
+        /// With ether below threshold, it should succeed.
+        (bool success,) = address(mainProxy).call{value: 5 wei}("");
+        assertTrue(success);
+
+        /// With ether above threshold, it should revert because a checkpoint activates and
+        /// an attestation is required.
+        (success,) = address(mainProxy).call{value: 15 wei}("");
+        assertFalse(success);
+    }
+
+    function testProxyFirewallPayableCall() public {
+        Checkpoint memory payAmountCheckpoint;
+        payAmountCheckpoint.threshold = 10;
+        payAmountCheckpoint.activation = Activation.ConstantThreshold;
+        /// Zero ref range.
+
+        /// Set with ether tx signature (zero).
+        IProxyFirewall(address(mainProxy)).setCheckpoint(ILogicContract.payAmount.selector, payAmountCheckpoint);
+
+        /// With ether below threshold, it should succeed.
+        ILogicContract(address(mainProxy)).payAmount{value: 5 wei}();
+
+        /// With ether above threshold, it should revert because a checkpoint activates and
+        /// an attestation is required.
+        vm.expectRevert();
+        ILogicContract(address(mainProxy)).payAmount{value: 15 wei}();
     }
 
     function testProxyGasChainedActive() public {

@@ -109,5 +109,7 @@ contract ProxyFirewall is IProxyFirewall, Firewall, Proxy, Multicall {
         }
     }
 
-    receive() external payable {}
+    receive() external payable virtual {
+        _fallback();
+    }
 }
