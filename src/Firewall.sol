@@ -114,7 +114,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     using Quantization for uint256;
 
     error AlreadyInitialized();
-    error InvalidThresholdType();
+    error InvalidActivationType();
     error UntrustedAttester(address attester);
     error CheckpointBlocked();
 
@@ -318,7 +318,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         if (checkpoint.activation == Activation.AlwaysActive) return (ref, true);
         if (checkpoint.activation == Activation.ConstantThreshold) return (ref, ref >= checkpoint.threshold);
         if (checkpoint.activation != Activation.AccumulatedThreshold) {
-            revert InvalidThresholdType();
+            revert InvalidActivationType();
         }
         /// Continue with the "accumulated threshold" logic.
         bytes32 slot = keccak256(abi.encode(selector, msg.sender));
