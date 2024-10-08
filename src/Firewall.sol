@@ -108,7 +108,7 @@ interface ICheckpointHook {
  * When a function call is intercepted, one of the arguments is used as a reference to compare
  * with a configured threshold. Exceeding the threshold
  */
-abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Initializable {
+abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions {
     using StorageSlot for bytes32;
     using Quantization for uint256;
 
