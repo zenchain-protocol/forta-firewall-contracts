@@ -2,7 +2,6 @@
 pragma solidity ^0.8.25;
 
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
-import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IFirewall, ICheckpointHook, Firewall} from "./Firewall.sol";
@@ -45,7 +44,7 @@ interface IProxyFirewall is IFirewall {
  * This contract preserves msg.sender, msg.sig and msg.data because it falls back to doing a DELEGATECALL
  * on the next implementation with the same call data.
  */
-contract ProxyFirewall is IProxyFirewall, Firewall, Proxy, Multicall {
+contract ProxyFirewall is IProxyFirewall, Firewall, Proxy {
     error UpgradeNonPayable();
 
     /// @custom:storage-location erc7201:forta.ProxyFirewall.next.implementation

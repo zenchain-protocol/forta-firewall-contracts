@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.25;
 
-import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
 import {Firewall, ICheckpointHook} from "./Firewall.sol";
 import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
@@ -13,7 +12,7 @@ import {IFirewallAccess} from "./FirewallAccess.sol";
  * is namespaced and causes no collision. The checkpoints must be adjusted by calling the
  * setCheckpoint(Checkpoint) function.
  */
-abstract contract InternalFirewall is Firewall, Multicall {
+abstract contract InternalFirewall is Firewall {
     constructor(
         ISecurityValidator _validator,
         ICheckpointHook _checkpointHook,
