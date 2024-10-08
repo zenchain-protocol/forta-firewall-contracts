@@ -5,7 +5,7 @@ import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IFirewall, ICheckpointHook, Firewall} from "./Firewall.sol";
-import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
+import {ISecurityValidator} from "./SecurityValidator.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
 
 interface IProxyFirewall is IFirewall {
