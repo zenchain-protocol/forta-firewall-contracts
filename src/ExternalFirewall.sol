@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.25;
 
-import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
 import {Firewall, ICheckpointHook} from "./Firewall.sol";
 import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
@@ -16,7 +15,7 @@ interface IExternalFirewall {
  * function or the withCheckpoint(uint256) modifier to call this contract. The checkpoints must
  * be adjusted by calling the setCheckpoint(Checkpoint) function.
  */
-contract ExternalFirewall is Firewall, Multicall {
+contract ExternalFirewall is Firewall {
     constructor(
         ISecurityValidator _validator,
         ICheckpointHook _checkpointHook,

@@ -78,8 +78,6 @@ interface IFirewall {
 
     function getCheckpoint(bytes4 selector) external view returns (uint192, uint16, uint16, Activation, bool);
 
-    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
-
     function attestedCall(Attestation calldata attestation, bytes calldata attestationSignature, bytes calldata data)
         external;
 }
@@ -242,19 +240,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     }
 
     /**
-     * @notice A helper function to call the security validator to save the attestation first
-     * before proceeding with the user call. This should typically be the first call in a
-     * multicall.
-     * @param attestation The security attestation - see SecurityValidator
-     * @param attestationSignature The security attestation signature - see SecurityValidator
-     */
-    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
-        _getFirewallStorage().validator.saveAttestation(attestation, attestationSignature);
-    }
-
-    /**
-     * @notice Helps write an attestation and call any function of this contract. This is an alternative
-     * to using a multicall that has saveAttestation().
+     * @notice Helps write an attestation and call any function of this contract.
      * @param attestation The set of fields that correspond to and enable the execution of call(s)
      * @param attestationSignature Signature of EIP-712 message
      * @param data Call data which contains the function selector and the encoded arguments
