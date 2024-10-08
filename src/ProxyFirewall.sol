@@ -79,6 +79,7 @@ contract ProxyFirewall is IProxyFirewall, Firewall, Proxy, Multicall {
      * @param data Call data
      */
     function upgradeNextAndCall(address newImplementation, bytes memory data) public payable onlyLogicUpgrader {
+        require(newImplementation != address(0), "next implementation after proxy firewall cannot be zero address");
         StorageSlot.getAddressSlot(NEXT_IMPLEMENTATION_SLOT).value = newImplementation;
         if (data.length > 0) {
             Address.functionDelegateCall(newImplementation, data);
