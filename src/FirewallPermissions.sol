@@ -45,6 +45,7 @@ abstract contract FirewallPermissions {
     }
 
     function _updateFirewallAccess(IFirewallAccess firewallAccess) internal {
+        require(address(firewallAccess) != address(0), "new firewall access contract cannot be zero address");
         _getFirewallPermissionsStorage().firewallAccess = firewallAccess;
     }
 
