@@ -31,7 +31,7 @@ interface IProxyFirewall is IFirewall {
  * function.
  *
  * When used with an ERC1967 proxy and a UUPSUpgradeable logic contract, the proxy storage points
- * points to the proxy firewall and the proxy firewall points to the logic contract, in the proxy
+ * to the proxy firewall and the proxy firewall points to the logic contract, in the proxy
  * storage. Both of the proxy firewall and the logic contract operate on the proxy storage.
  *
  * The UUPSUpgradeable logic contract keeps the privileges to modify the implementation specified
