@@ -255,7 +255,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     }
 
     function _secureExecution() internal virtual {
-        Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[msg.sig];
+        Checkpoint memory checkpoint = _getFirewallStorage().checkpoints[msg.sig];
         require(checkpoint.refEnd <= msg.data.length, "refEnd too large for slicing");
         if (msg.sig == 0 || (checkpoint.refEnd == 0 && checkpoint.refStart == 0)) {
             /// Ether transaction or paid transaction with no ref range: use msg.value as ref
@@ -273,19 +273,19 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     }
 
     function _secureExecution(address caller, bytes4 selector, uint256 ref) internal virtual {
-        Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[selector];
+        Checkpoint memory checkpoint = _getFirewallStorage().checkpoints[selector];
         bool ok;
         (ref, ok) = _checkpointActivated(checkpoint, caller, selector, ref);
         if (ok) _executeCheckpoint(checkpoint, bytes32(ref.quantize()), selector);
     }
 
     function _secureExecution(bytes4 selector, bytes32 input) internal virtual {
-        Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[selector];
+        Checkpoint memory checkpoint = _getFirewallStorage().checkpoints[selector];
         bool ok = _checkpointActivated(checkpoint);
         if (ok) _executeCheckpoint(checkpoint, input, selector);
     }
 
-    function _executeCheckpoint(Checkpoint storage checkpoint, bytes32 input, bytes4 selector) private {
+    function _executeCheckpoint(Checkpoint memory checkpoint, bytes32 input, bytes4 selector) private {
         FirewallStorage storage $ = _getFirewallStorage();
 
         /// Short-circuit if the trusted origin pattern is supported and is available.
@@ -302,7 +302,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         }
     }
 
-    function _checkpointActivated(Checkpoint storage checkpoint, address caller, bytes4 selector, uint256 ref)
+    function _checkpointActivated(Checkpoint memory checkpoint, address caller, bytes4 selector, uint256 ref)
         private
         returns (uint256, bool)
     {
@@ -328,14 +328,14 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         return (ref, acc >= checkpoint.threshold);
     }
 
-    function _checkpointActivated(Checkpoint storage checkpoint) private view returns (bool) {
+    function _checkpointActivated(Checkpoint memory checkpoint) private pure returns (bool) {
         if (checkpoint.activation == Activation.Inactive) return false;
         if (checkpoint.activation == Activation.AlwaysBlocked) revert CheckpointBlocked();
         if (checkpoint.activation == Activation.AlwaysActive) return true;
         return false;
     }
 
-    function _isTrustedOrigin(Checkpoint storage checkpoint) internal returns (bool) {
+    function _isTrustedOrigin(Checkpoint memory checkpoint) internal returns (bool) {
         if (checkpoint.trustedOrigin) {
             emit SupportsTrustedOrigin(address(this));
             return _isTrustedAttester(tx.origin);

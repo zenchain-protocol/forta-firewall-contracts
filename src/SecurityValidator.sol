@@ -218,7 +218,8 @@ contract SecurityValidator is ISecurityValidator, EIP712, ERC2771Context {
         StorageSlot.tstore(HASH_CACHE_INDEX_SLOT.asUint256(), 0);
 
         /// Store all execution hashes.
-        for (uint256 i = 0; i < attestation.executionHashes.length; i++) {
+        uint256 len = attestation.executionHashes.length;
+        for (uint256 i = 0; i < len; i++) {
             bytes32 execHash = attestation.executionHashes[i];
             bytes32 currIndex = bytes32(HASH_CACHE_START_SLOT + i);
             StorageSlot.tstore(currIndex.asBytes32(), execHash);
