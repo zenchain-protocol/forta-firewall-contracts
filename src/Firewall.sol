@@ -2,7 +2,6 @@
 pragma solidity ^0.8.25;
 
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
@@ -109,7 +108,7 @@ interface ICheckpointHook {
  * When a function call is intercepted, one of the arguments is used as a reference to compare
  * with a configured threshold. Exceeding the threshold
  */
-abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Initializable {
+abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions {
     using StorageSlot for bytes32;
     using Quantization for uint256;
 
