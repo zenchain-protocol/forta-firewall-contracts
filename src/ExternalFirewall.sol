@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
+// See Forta Network License: https://github.com/forta-network/forta-firewall-contracts/blob/master/LICENSE.md
+
 pragma solidity ^0.8.25;
 
 import {Firewall, ICheckpointHook} from "./Firewall.sol";
-import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
+import {ISecurityValidator} from "./SecurityValidator.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
 
 interface IExternalFirewall {
