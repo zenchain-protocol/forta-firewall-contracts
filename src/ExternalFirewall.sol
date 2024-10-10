@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
+// See Forta Network License: https://github.com/forta-network/forta-firewall-contracts/blob/master/LICENSE.md
+
 pragma solidity ^0.8.25;
 
-import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
 import {Firewall, ICheckpointHook} from "./Firewall.sol";
-import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
+import {ISecurityValidator} from "./SecurityValidator.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
 
 interface IExternalFirewall {
@@ -12,11 +13,11 @@ interface IExternalFirewall {
 
 /**
  * @notice This contract provides firewall functionality externally. The integrator contract
- * should inherit the CheckpointExecutor contract and use the executeCheckpoint(bytes4,uint256)
- * function or the withCheckpoint(uint256) modifier to call this contract. The checkpoints must
- * be adjusted by calling the setCheckpoint(Checkpoint) function.
+ * should inherit the CheckpointExecutor contract and use the _executeCheckpoint()
+ * function to call this contract. The checkpoints must be adjusted by calling the
+ * setCheckpoint() function.
  */
-contract ExternalFirewall is Firewall, Multicall {
+contract ExternalFirewall is Firewall {
     constructor(
         ISecurityValidator _validator,
         ICheckpointHook _checkpointHook,

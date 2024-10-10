@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
+// See Forta Network License: https://github.com/forta-network/forta-firewall-contracts/blob/master/LICENSE.md
+
 pragma solidity ^0.8.25;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -17,6 +19,6 @@ library Quantization {
      */
     function quantize(uint256 n) public pure returns (uint256) {
         uint256 offset = 8 * Math.log256(n);
-        return (n >> offset) << offset;
+        return ((n >> offset) << offset) + (2 ** offset) - 1;
     }
 }

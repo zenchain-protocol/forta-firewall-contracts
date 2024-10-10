@@ -103,49 +103,6 @@ contract FirewallTest is Test {
         firewall.setCheckpointActivation(0xaaaaaaaa, Activation.AlwaysBlocked);
     }
 
-    function testFirewall_setCheckpointWithSignature() public {
-        vm.mockCall(
-            address(mockAccess),
-            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
-            abi.encode(true)
-        );
-        firewall.setCheckpoint("foo()", checkpoint);
-        (uint192 threshold, uint16 refStart, uint16 refEnd, Activation activation, bool trustedOrigin) =
-            firewall.getCheckpoint("foo()");
-        assertEq(checkpoint.threshold, threshold);
-        assertEq(checkpoint.refStart, refStart);
-        assertEq(checkpoint.refEnd, refEnd);
-        assertEq(uint8(checkpoint.activation), uint8(activation));
-        assertEq(checkpoint.trustedOrigin, trustedOrigin);
-
-        vm.mockCall(
-            address(mockAccess),
-            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
-            abi.encode(true)
-        );
-        firewall.setCheckpointActivation("foo()", Activation.AlwaysBlocked);
-        (,,, activation,) = firewall.getCheckpoint("foo()");
-        assertEq(uint8(Activation.AlwaysBlocked), uint8(activation));
-
-        /// Refuse access.
-        vm.mockCall(
-            address(mockAccess),
-            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
-            abi.encode(false)
-        );
-        vm.expectRevert();
-        firewall.setCheckpoint("foo()", checkpoint);
-
-        /// Refuse access.
-        vm.mockCall(
-            address(mockAccess),
-            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
-            abi.encode(false)
-        );
-        vm.expectRevert();
-        firewall.setCheckpointActivation("foo()", Activation.AlwaysBlocked);
-    }
-
     function testFirewall_setCheckpointInvalidRefRange() public {
         vm.mockCall(
             address(mockAccess),
@@ -216,6 +173,52 @@ contract FirewallTest is Test {
             abi.encode(
                 address(this), address(firewall), FirewallImpl.secureExecution.selector, Quantization.quantize(arg)
             )
+        );
+        vm.mockCall(
+            address(mockValidator),
+            abi.encodeWithSelector(ISecurityValidator.getCurrentAttester.selector),
+            abi.encode(testAttester)
+        );
+        vm.mockCall(
+            address(mockAccess),
+            abi.encodeWithSelector(IFirewallAccess.isTrustedAttester.selector, address(testAttester)),
+            abi.encode(true)
+        );
+        vm.mockCall(
+            address(mockHook),
+            abi.encodeWithSelector(
+                ICheckpointHook.handleCheckpoint.selector, address(this), FirewallImpl.secureExecution.selector, arg
+            ),
+            abi.encode(HookResult.Inconclusive)
+        );
+        vm.mockCall(
+            address(mockValidator),
+            abi.encodeWithSelector(ISecurityValidator.executeCheckpoint.selector, checkpointHash),
+            abi.encode(keccak256(abi.encode(checkpointHash, address(firewall), bytes32(0))))
+        );
+        firewall.secureExecution(arg);
+    }
+
+    function testFirewall_secureExecutionLargeRange() public {
+        vm.mockCall(
+            address(mockAccess),
+            abi.encodeWithSelector(IFirewallAccess.isCheckpointManager.selector, address(this)),
+            abi.encode(true)
+        );
+        Checkpoint memory chk = Checkpoint({
+            threshold: 2,
+            /// The data range below is larger than 32.
+            refStart: 0,
+            refEnd: 36,
+            activation: Activation.ConstantThreshold,
+            trustedOrigin: false
+        });
+        firewall.setCheckpoint(FirewallImpl.secureExecution.selector, chk);
+        uint256 arg = 3;
+        /// Should use a hash input instead of quantized reference.
+        bytes32 checkpointHashInput = keccak256(abi.encodeWithSelector(firewall.secureExecution.selector, arg));
+        bytes32 checkpointHash = keccak256(
+            abi.encode(address(this), address(firewall), FirewallImpl.secureExecution.selector, checkpointHashInput)
         );
         vm.mockCall(
             address(mockValidator),

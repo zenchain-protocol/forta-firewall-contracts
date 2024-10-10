@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
+// See Forta Network License: https://github.com/forta-network/forta-firewall-contracts/blob/master/LICENSE.md
+
 pragma solidity ^0.8.25;
 
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
-import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IFirewall, ICheckpointHook, Firewall} from "./Firewall.sol";
-import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
+import {ISecurityValidator} from "./SecurityValidator.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
 
 interface IProxyFirewall is IFirewall {
@@ -31,7 +33,7 @@ interface IProxyFirewall is IFirewall {
  * function.
  *
  * When used with an ERC1967 proxy and a UUPSUpgradeable logic contract, the proxy storage points
- * points to the proxy firewall and the proxy firewall points to the logic contract, in the proxy
+ * to the proxy firewall and the proxy firewall points to the logic contract, in the proxy
  * storage. Both of the proxy firewall and the logic contract operate on the proxy storage.
  *
  * The UUPSUpgradeable logic contract keeps the privileges to modify the implementation specified
@@ -40,12 +42,12 @@ interface IProxyFirewall is IFirewall {
  * to modify the implementation storage on the proxy, in order to point to the proxy firewall logic.
  * As a next action in the same transaction, the proxy firewall should be pointed to the logic contract.
  * For such upgrade cases, upgradeToAndCall() and upgradeNextAndCall() functions are made available
- * from the proxy firewall and the UUPSUpgradeable contracts, respectively.
+ * from the UUPSUpgradeable and ProxyFirewall contracts, respectively.
  *
  * This contract preserves msg.sender, msg.sig and msg.data because it falls back to doing a DELEGATECALL
  * on the next implementation with the same call data.
  */
-contract ProxyFirewall is IProxyFirewall, Firewall, Proxy, Multicall {
+contract ProxyFirewall is IProxyFirewall, Firewall, Proxy, Initializable {
     error UpgradeNonPayable();
 
     /// @custom:storage-location erc7201:forta.ProxyFirewall.next.implementation
@@ -79,6 +81,7 @@ contract ProxyFirewall is IProxyFirewall, Firewall, Proxy, Multicall {
      * @param data Call data
      */
     function upgradeNextAndCall(address newImplementation, bytes memory data) public payable onlyLogicUpgrader {
+        require(newImplementation != address(0), "next implementation after proxy firewall cannot be zero address");
         StorageSlot.getAddressSlot(NEXT_IMPLEMENTATION_SLOT).value = newImplementation;
         if (data.length > 0) {
             Address.functionDelegateCall(newImplementation, data);
@@ -109,5 +112,7 @@ contract ProxyFirewall is IProxyFirewall, Firewall, Proxy, Multicall {
         }
     }
 
-    receive() external payable {}
+    receive() external payable virtual {
+        _fallback();
+    }
 }

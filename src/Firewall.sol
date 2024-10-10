@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
+// See Forta Network License: https://github.com/forta-network/forta-firewall-contracts/blob/master/LICENSE.md
+
 pragma solidity ^0.8.25;
 
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IFirewallAccess} from "./FirewallAccess.sol";
@@ -72,23 +73,19 @@ interface IFirewall {
             IFirewallAccess _firewallAccess
         );
 
-    function setCheckpoint(string memory funcSig, Checkpoint memory checkpoint) external;
-
     function setCheckpoint(bytes4 selector, Checkpoint memory checkpoint) external;
-
-    function setCheckpointActivation(string memory funcSig, Activation activation) external;
 
     function setCheckpointActivation(bytes4 selector, Activation activation) external;
 
-    function getCheckpoint(string memory funcSig) external view returns (uint192, uint16, uint16, Activation, bool);
-
     function getCheckpoint(bytes4 selector) external view returns (uint192, uint16, uint16, Activation, bool);
 
-    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
+    function attestedCall(Attestation calldata attestation, bytes calldata attestationSignature, bytes calldata data)
+        external
+        returns (bytes memory);
 }
 
 interface IAttesterInfo {
-    event AttesterControllerUpdated(bytes32 attesterControllerId);
+    event AttesterControllerUpdated(bytes32 indexed attesterControllerId);
 
     function getAttesterControllerId() external view returns (bytes32);
 }
@@ -110,26 +107,26 @@ interface ICheckpointHook {
  * and makes available internal functions to the child contract in order to help intercept
  * function calls.
  *
- * When a function call is intercepted, one of the arguments is used as a reference to compare
- * with a configured threshold. Exceeding the threshold
+ * When a function call is intercepted, one of the arguments can be used as a reference to compare
+ * with a configured threshold. Exceeding the threshold causes checkpoint execution which requires
+ * a corresponding attestation to be present in the SecurityValidator.
  */
-abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Initializable {
+abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions {
     using StorageSlot for bytes32;
     using Quantization for uint256;
 
-    error AlreadyInitialized();
-    error InvalidThresholdType();
+    error InvalidActivationType();
     error UntrustedAttester(address attester);
     error CheckpointBlocked();
 
-    event SecurityConfigUpdated(ISecurityValidator validator, IFirewallAccess firewallAccess);
-    event SupportsTrustedOrigin(address);
+    event SecurityConfigUpdated(ISecurityValidator indexed validator, IFirewallAccess indexed firewallAccess);
+    event SupportsTrustedOrigin(address indexed firewall);
 
     struct FirewallStorage {
         ISecurityValidator validator;
         ICheckpointHook checkpointHook;
         bytes32 attesterControllerId;
-        mapping(bytes4 => Checkpoint) checkpoints;
+        mapping(bytes4 funcSelector => Checkpoint checkpoint) checkpoints;
     }
 
     /// @custom:storage-location erc7201:forta.Firewall.storage
@@ -153,7 +150,7 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     }
 
     /**
-     * @notice Initializes the firewall config for the first time.
+     * @notice Updates the firewall config.
      * @param _validator The security validator which the firewall calls for saving
      * the attestation and executing checkpoints.
      * @param _checkpointHook Checkpoint hook contract which is called before every checkpoint.
@@ -210,16 +207,6 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     }
 
     /**
-     * @notice Sets checkpoint values for given function signature, call data byte range
-     * and with given threshold type.
-     * @param funcSig Signature of the function.
-     * @param checkpoint Checkpoint data.
-     */
-    function setCheckpoint(string memory funcSig, Checkpoint memory checkpoint) public virtual onlyCheckpointManager {
-        setCheckpoint(_toSelector(funcSig), checkpoint);
-    }
-
-    /**
      * @notice Sets checkpoint values for given function selector, call data byte range
      * and with given threshold type.
      * @param selector Selector of the function.
@@ -232,37 +219,11 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
 
     /**
      * @notice Sets the checkpoint activation type.
-     * @param funcSig Signature of the function.
-     * @param activation Activation type.
-     */
-    function setCheckpointActivation(string memory funcSig, Activation activation)
-        public
-        virtual
-        onlyCheckpointManager
-    {
-        return setCheckpointActivation(_toSelector(funcSig), activation);
-    }
-
-    /**
-     * @notice Sets the checkpoint activation type.
      * @param selector Selector of the function.
      * @param activation Activation type.
      */
     function setCheckpointActivation(bytes4 selector, Activation activation) public virtual onlyCheckpointManager {
         _getFirewallStorage().checkpoints[selector].activation = activation;
-    }
-
-    /**
-     * @notice Gets the checkpoint values for given function signature.
-     * @param funcSig Signature of the function.
-     */
-    function getCheckpoint(string memory funcSig)
-        public
-        view
-        virtual
-        returns (uint192, uint16, uint16, Activation, bool)
-    {
-        return getCheckpoint(_toSelector(funcSig));
     }
 
     /**
@@ -281,57 +242,58 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
     }
 
     /**
-     * @notice A helper function to call the security validator to save the attestation first
-     * before proceeding with the user call. This should typically be the first call in a
-     * multicall.
-     * @param attestation The security attestation - see SecurityValidator
-     * @param attestationSignature The security attestation signature - see SecurityValidator
-     */
-    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) public {
-        _getFirewallStorage().validator.saveAttestation(attestation, attestationSignature);
-    }
-
-    /**
-     * @notice Helps write an attestation and call any function of this contract. This is an alternative
-     * to using a multicall that has saveAttestation().
+     * @notice Helps write an attestation and call any function of this contract.
      * @param attestation The set of fields that correspond to and enable the execution of call(s)
      * @param attestationSignature Signature of EIP-712 message
      * @param data Call data which contains the function selector and the encoded arguments
      */
     function attestedCall(Attestation calldata attestation, bytes calldata attestationSignature, bytes calldata data)
         public
+        returns (bytes memory)
     {
         _getFirewallStorage().validator.saveAttestation(attestation, attestationSignature);
-        Address.functionDelegateCall(address(this), data);
+        return Address.functionDelegateCall(address(this), data);
     }
 
     function _secureExecution() internal virtual {
-        Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[msg.sig];
+        Checkpoint memory checkpoint = _getFirewallStorage().checkpoints[msg.sig];
         require(checkpoint.refEnd <= msg.data.length, "refEnd too large for slicing");
-        bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
-        uint256 ref = uint256(bytes32(byteRange));
-        _secureExecution(msg.sender, msg.sig, ref);
+        if (msg.sig == 0 || (checkpoint.refEnd == 0 && checkpoint.refStart == 0)) {
+            /// Ether transaction or paid transaction with no ref range: use msg.value as ref
+            _secureExecution(msg.sender, msg.sig, msg.value);
+        } else if (checkpoint.refEnd - checkpoint.refStart > 32) {
+            /// Support larger data ranges as direct input hashes instead of deriving a reference.
+            bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
+            bytes32 input = keccak256(byteRange);
+            _executeCheckpoint(checkpoint, input, msg.sig);
+        } else {
+            bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
+            uint256 ref = uint256(bytes32(byteRange));
+            _secureExecution(msg.sender, msg.sig, ref);
+        }
     }
 
     function _secureExecution(address caller, bytes4 selector, uint256 ref) internal virtual {
-        Checkpoint storage checkpoint = _getFirewallStorage().checkpoints[selector];
+        Checkpoint memory checkpoint = _getFirewallStorage().checkpoints[selector];
         bool ok;
-        (ref, ok) = _checkpointActivated(caller, selector, ref, checkpoint);
-        if (ok) _executeCheckpoint(ref, selector, checkpoint.trustedOrigin);
+        (ref, ok) = _checkpointActivated(checkpoint, caller, selector, ref);
+        if (ok) _executeCheckpoint(checkpoint, bytes32(ref.quantize()), selector);
     }
 
-    function _executeCheckpoint(uint256 ref, bytes4 selector, bool trustedOrigin) private {
+    function _secureExecution(bytes4 selector, bytes32 input) internal virtual {
+        Checkpoint memory checkpoint = _getFirewallStorage().checkpoints[selector];
+        bool ok = _checkpointActivated(checkpoint);
+        if (ok) _executeCheckpoint(checkpoint, input, selector);
+    }
+
+    function _executeCheckpoint(Checkpoint memory checkpoint, bytes32 input, bytes4 selector) private {
         FirewallStorage storage $ = _getFirewallStorage();
 
-        /// Short-circuit if the trusted origin pattern is supported and
-        /// is available.
-        if (trustedOrigin) {
-            emit SupportsTrustedOrigin(address(this));
-            if (_isTrustedAttester(tx.origin)) {
-                return;
-            }
-        }
-        /// Otherwise, fall back to the checkpoint execution.
+        /// Short-circuit if the trusted origin pattern is supported and is available.
+        /// Otherwise, continue with checkpoint execution.
+        if (_isTrustedOrigin(checkpoint)) return;
+
+        $.validator.executeCheckpoint(keccak256(abi.encode(msg.sender, address(this), selector, input)));
 
         /// Ensure first that the current attester can be trusted.
         /// If the current attester is zero address, let the security validator deal with that.
@@ -339,11 +301,9 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         if (currentAttester != address(0) && !_isTrustedAttester(currentAttester)) {
             revert UntrustedAttester(currentAttester);
         }
-
-        $.validator.executeCheckpoint(keccak256(abi.encode(msg.sender, address(this), selector, ref.quantize())));
     }
 
-    function _checkpointActivated(address caller, bytes4 selector, uint256 ref, Checkpoint storage checkpoint)
+    function _checkpointActivated(Checkpoint memory checkpoint, address caller, bytes4 selector, uint256 ref)
         private
         returns (uint256, bool)
     {
@@ -356,10 +316,10 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         }
         if (checkpoint.activation == Activation.Inactive) return (ref, false);
         if (checkpoint.activation == Activation.AlwaysBlocked) revert CheckpointBlocked();
-        if (checkpoint.activation == Activation.AlwaysActive) return (1, true); // special case: simplify ref for checkpoint stability
+        if (checkpoint.activation == Activation.AlwaysActive) return (ref, true);
         if (checkpoint.activation == Activation.ConstantThreshold) return (ref, ref >= checkpoint.threshold);
         if (checkpoint.activation != Activation.AccumulatedThreshold) {
-            revert InvalidThresholdType();
+            revert InvalidActivationType();
         }
         /// Continue with the "accumulated threshold" logic.
         bytes32 slot = keccak256(abi.encode(selector, msg.sender));
@@ -369,13 +329,24 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions, Ini
         return (ref, acc >= checkpoint.threshold);
     }
 
+    function _checkpointActivated(Checkpoint memory checkpoint) private pure returns (bool) {
+        if (checkpoint.activation == Activation.Inactive) return false;
+        if (checkpoint.activation == Activation.AlwaysBlocked) revert CheckpointBlocked();
+        if (checkpoint.activation == Activation.AlwaysActive) return true;
+        return false;
+    }
+
+    function _isTrustedOrigin(Checkpoint memory checkpoint) internal returns (bool) {
+        if (checkpoint.trustedOrigin) {
+            emit SupportsTrustedOrigin(address(this));
+            return _isTrustedAttester(tx.origin);
+        }
+        return false;
+    }
+
     function _getFirewallStorage() internal pure virtual returns (FirewallStorage storage $) {
         assembly {
             $.slot := STORAGE_SLOT
         }
-    }
-
-    function _toSelector(string memory funcSig) private pure returns (bytes4) {
-        return bytes4(keccak256(bytes(funcSig)));
     }
 }
