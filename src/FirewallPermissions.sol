@@ -3,7 +3,7 @@
 
 pragma solidity ^0.8.25;
 
-import {IFirewallAccess} from "./FirewallAccess.sol";
+import "./interfaces/IFirewallAccess.sol";
 
 /**
  * @notice Simplifies interactions with a firewall access contract.
@@ -26,7 +26,7 @@ abstract contract FirewallPermissions {
     modifier onlyCheckpointManager() {
         require(
             _getFirewallPermissionsStorage().firewallAccess.isCheckpointManager(msg.sender),
-            "caller is not firewall admin"
+            "caller is not checkpoint manager"
         );
         _;
     }

@@ -4,7 +4,7 @@
 pragma solidity ^0.8.25;
 
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
-import {IExternalFirewall} from "./ExternalFirewall.sol";
+import "./interfaces/IExternallFirewall.sol";
 
 /**
  * @notice A helper contract to call an external firewall.
@@ -30,6 +30,19 @@ abstract contract CheckpointExecutor {
             $.slot := STORAGE_SLOT
         }
         IExternalFirewall($.externalFirewall).executeCheckpoint(msg.sender, selector, ref);
+    }
+
+    /**
+     * @notice Executes a checkpoint by calling a known external firewall contract.
+     * @param selector Selector of the function which the checkpoint is configured and executed for
+     * @param input The input value to use in checkpoint hash computation
+     */
+    function _executeCheckpoint(bytes4 selector, bytes32 input) internal virtual {
+        CheckpointExecutorStorage storage $;
+        assembly {
+            $.slot := STORAGE_SLOT
+        }
+        IExternalFirewall($.externalFirewall).executeCheckpoint(msg.sender, selector, input);
     }
 
     /**

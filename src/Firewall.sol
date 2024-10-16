@@ -4,102 +4,13 @@
 pragma solidity ^0.8.25;
 
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IFirewallAccess} from "./FirewallAccess.sol";
 import {FirewallPermissions} from "./FirewallPermissions.sol";
-import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
 import {Quantization} from "./Quantization.sol";
-
-/**
- * @notice A checkpoint is a configurable point in code that activates in different conditions and
- * does security checks before proceeding with the rest of the execution.
- */
-struct Checkpoint {
-    /// @notice The value to compare against an incoming function argument.
-    uint192 threshold;
-    /**
-     * @notice Defines the expected start position of the incoming argument in the call data.
-     * This is needed in some integration cases when the reference is found directly from call data
-     * bytes.
-     */
-    uint16 refStart;
-    /**
-     * @notice Defines the expected end position of the incoming argument in the call data.
-     * This is needed in some integration cases when the reference is found directly from call data
-     * bytes.
-     */
-    uint16 refEnd;
-    /**
-     * @notice Defines the type of checkpoint activation (see types below).
-     */
-    Activation activation;
-    /**
-     * @notice This is for relying on tx.origin instead of hash-based checkpoint execution.
-     */
-    bool trustedOrigin;
-}
-
-/// @notice Checkpoint activation modes.
-enum Activation {
-    /// @notice The default activation value for an unset checkpoint, which should mean "no security checks".
-    Inactive,
-    /// @notice The checkpoint is blocked by default.
-    AlwaysBlocked,
-    /// @notice Every call to the integrated function should require security checks.
-    AlwaysActive,
-    /// @notice Security checks are only required if a specific function argument exceeds the threshold.
-    ConstantThreshold,
-    /// @notice For adding up all intercepted values by the same checkpoint before comparing with the threshold.
-    AccumulatedThreshold
-}
-
-interface IFirewall {
-    function updateFirewallConfig(
-        ISecurityValidator _validator,
-        ICheckpointHook _checkpointHook,
-        bytes32 _attesterControllerId,
-        IFirewallAccess _firewallAccess
-    ) external;
-
-    function getFirewallConfig()
-        external
-        view
-        returns (
-            ISecurityValidator _validator,
-            ICheckpointHook _checkpointHook,
-            bytes32 _attesterControllerId,
-            IFirewallAccess _firewallAccess
-        );
-
-    function setCheckpoint(bytes4 selector, Checkpoint memory checkpoint) external;
-
-    function setCheckpointActivation(bytes4 selector, Activation activation) external;
-
-    function getCheckpoint(bytes4 selector) external view returns (uint192, uint16, uint16, Activation, bool);
-
-    function attestedCall(Attestation calldata attestation, bytes calldata attestationSignature, bytes calldata data)
-        external
-        returns (bytes memory);
-}
-
-interface IAttesterInfo {
-    event AttesterControllerUpdated(bytes32 indexed attesterControllerId);
-
-    function getAttesterControllerId() external view returns (bytes32);
-}
-
-enum HookResult {
-    Inconclusive,
-    ForceActivation,
-    ForceDeactivation
-}
-
-/// @notice An interface to support custom configurations per executed checkpoint.
-interface ICheckpointHook {
-    function handleCheckpoint(address caller, bytes4 selector, uint256 ref) external view returns (HookResult);
-}
+import "./interfaces/IFirewall.sol";
+import "./interfaces/FirewallDependencies.sol";
+import "./interfaces/IAttesterInfo.sol";
 
 /**
  * @notice Firewall is a base contract which provides protection against exploits.
@@ -118,9 +29,6 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions {
     error InvalidActivationType();
     error UntrustedAttester(address attester);
     error CheckpointBlocked();
-
-    event SecurityConfigUpdated(ISecurityValidator indexed validator, IFirewallAccess indexed firewallAccess);
-    event SupportsTrustedOrigin(address indexed firewall);
 
     struct FirewallStorage {
         ISecurityValidator validator;
@@ -258,14 +166,17 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions {
     function _secureExecution() internal virtual {
         Checkpoint memory checkpoint = _getFirewallStorage().checkpoints[msg.sig];
         require(checkpoint.refEnd <= msg.data.length, "refEnd too large for slicing");
+        /// Default to msg data length.
+        uint256 refEnd = checkpoint.refEnd;
+        if (refEnd > msg.data.length) refEnd = msg.data.length;
         if (msg.sig == 0 || (checkpoint.refEnd == 0 && checkpoint.refStart == 0)) {
             /// Ether transaction or paid transaction with no ref range: use msg.value as ref
             _secureExecution(msg.sender, msg.sig, msg.value);
-        } else if (checkpoint.refEnd - checkpoint.refStart > 32) {
+        } else if (refEnd - checkpoint.refStart > 32) {
             /// Support larger data ranges as direct input hashes instead of deriving a reference.
             bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
             bytes32 input = keccak256(byteRange);
-            _executeCheckpoint(checkpoint, input, msg.sig);
+            _secureExecution(msg.sender, msg.sig, input);
         } else {
             bytes calldata byteRange = msg.data[checkpoint.refStart:checkpoint.refEnd];
             uint256 ref = uint256(bytes32(byteRange));
@@ -277,23 +188,26 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions {
         Checkpoint memory checkpoint = _getFirewallStorage().checkpoints[selector];
         bool ok;
         (ref, ok) = _checkpointActivated(checkpoint, caller, selector, ref);
-        if (ok) _executeCheckpoint(checkpoint, bytes32(ref.quantize()), selector);
+        if (ok) _executeCheckpoint(checkpoint, caller, bytes32(ref.quantize()), selector);
     }
 
-    function _secureExecution(bytes4 selector, bytes32 input) internal virtual {
+    function _secureExecution(address caller, bytes4 selector, bytes32 input) internal virtual {
         Checkpoint memory checkpoint = _getFirewallStorage().checkpoints[selector];
         bool ok = _checkpointActivated(checkpoint);
-        if (ok) _executeCheckpoint(checkpoint, input, selector);
+        if (ok) _executeCheckpoint(checkpoint, caller, input, selector);
     }
 
-    function _executeCheckpoint(Checkpoint memory checkpoint, bytes32 input, bytes4 selector) private {
+    function _executeCheckpoint(Checkpoint memory checkpoint, address caller, bytes32 input, bytes4 selector)
+        internal
+        virtual
+    {
         FirewallStorage storage $ = _getFirewallStorage();
 
         /// Short-circuit if the trusted origin pattern is supported and is available.
         /// Otherwise, continue with checkpoint execution.
         if (_isTrustedOrigin(checkpoint)) return;
 
-        $.validator.executeCheckpoint(keccak256(abi.encode(msg.sender, address(this), selector, input)));
+        $.validator.executeCheckpoint(keccak256(abi.encode(caller, address(this), selector, input)));
 
         /// Ensure first that the current attester can be trusted.
         /// If the current attester is zero address, let the security validator deal with that.
@@ -304,7 +218,8 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions {
     }
 
     function _checkpointActivated(Checkpoint memory checkpoint, address caller, bytes4 selector, uint256 ref)
-        private
+        internal
+        virtual
         returns (uint256, bool)
     {
         ICheckpointHook checkpointHook = _getFirewallStorage().checkpointHook;
@@ -329,14 +244,14 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions {
         return (ref, acc >= checkpoint.threshold);
     }
 
-    function _checkpointActivated(Checkpoint memory checkpoint) private pure returns (bool) {
+    function _checkpointActivated(Checkpoint memory checkpoint) internal pure virtual returns (bool) {
         if (checkpoint.activation == Activation.Inactive) return false;
         if (checkpoint.activation == Activation.AlwaysBlocked) revert CheckpointBlocked();
         if (checkpoint.activation == Activation.AlwaysActive) return true;
         return false;
     }
 
-    function _isTrustedOrigin(Checkpoint memory checkpoint) internal returns (bool) {
+    function _isTrustedOrigin(Checkpoint memory checkpoint) internal virtual returns (bool) {
         if (checkpoint.trustedOrigin) {
             emit SupportsTrustedOrigin(address(this));
             return _isTrustedAttester(tx.origin);
