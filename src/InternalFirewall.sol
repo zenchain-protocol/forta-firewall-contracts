@@ -22,4 +22,9 @@ abstract contract InternalFirewall is Firewall {
     ) {
         _updateFirewallConfig(_validator, _checkpointHook, _attesterControllerId, _firewallAccess);
     }
+
+    modifier safeExecution() {
+        _secureExecution();
+        _;
+    }
 }
