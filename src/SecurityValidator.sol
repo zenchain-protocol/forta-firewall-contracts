@@ -130,7 +130,7 @@ contract SecurityValidator is ISecurityValidator, EIP712, ERC2771Context {
         bytes32 executionHash = StorageSlot.tload(HASH_SLOT.asBytes32());
         executionHash = executionHashFrom(checkpointHash, msg.sender, executionHash);
 
-        /// If there is there is no actively used attestation and the bypass flag is not used,
+        /// If there is no actively used attestation and the bypass flag is not used,
         /// then the transaction should revert.
         bool bypassed;
         if (getCurrentAttester() == address(0)) {
