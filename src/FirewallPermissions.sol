@@ -26,7 +26,7 @@ abstract contract FirewallPermissions {
     modifier onlyCheckpointManager() {
         require(
             _getFirewallPermissionsStorage().firewallAccess.isCheckpointManager(msg.sender),
-            "caller is not firewall admin"
+            "caller is not checkpoint manager"
         );
         _;
     }

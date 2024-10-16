@@ -4,7 +4,6 @@
 pragma solidity ^0.8.25;
 
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {FirewallPermissions} from "./FirewallPermissions.sol";
