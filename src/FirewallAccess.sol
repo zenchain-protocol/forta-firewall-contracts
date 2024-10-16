@@ -4,6 +4,7 @@
 pragma solidity ^0.8.25;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import "./interfaces/IFirewallAccess.sol";
 
 /// @dev All role ids are keccak256() of their names.
 bytes32 constant FIREWALL_ADMIN_ROLE = 0x98e851166691f2754ebd45a95aded8e2022948d80311058644ab62dcc95eddca;
@@ -13,16 +14,6 @@ bytes32 constant LOGIC_UPGRADER_ROLE = 0x8cd1a30abbcda9a4b45f36d916f90dd33594774
 bytes32 constant CHECKPOINT_EXECUTOR_ROLE = 0xae57c28fd3eb1dad9c6bc61e0a47e0f57230389fedc20e0381b101467bc4b075;
 bytes32 constant ATTESTER_MANAGER_ROLE = 0xa6104eeb16757cf1b916694e5bc99107eaf38064b4948290b9f96447e33d6396;
 bytes32 constant TRUSTED_ATTESTER_ROLE = 0x725a15d5fb1f1294f13d7272d4441134b951367ff5aebd74853471ce1cfb9cc4;
-
-interface IFirewallAccess {
-    function isFirewallAdmin(address caller) external view returns (bool);
-    function isProtocolAdmin(address caller) external view returns (bool);
-    function isCheckpointManager(address caller) external view returns (bool);
-    function isLogicUpgrader(address caller) external view returns (bool);
-    function isCheckpointExecutor(address caller) external view returns (bool);
-    function isAttesterManager(address caller) external view returns (bool);
-    function isTrustedAttester(address caller) external view returns (bool);
-}
 
 /**
  * @notice Keeps the set of accounts which can manage a firewall.

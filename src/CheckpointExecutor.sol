@@ -4,7 +4,7 @@
 pragma solidity ^0.8.25;
 
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
-import {IExternalFirewall} from "./ExternalFirewall.sol";
+import "./interfaces/IExternallFirewall.sol";
 
 /**
  * @notice A helper contract to call an external firewall.

@@ -4,18 +4,19 @@ pragma solidity ^0.8.25;
 import {Test, console, Vm} from "forge-std/Test.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {IProxyFirewall, ProxyFirewall} from "../src/ProxyFirewall.sol";
-import {Checkpoint, Activation, ICheckpointHook} from "../src/Firewall.sol";
+import {ProxyFirewall} from "../src/ProxyFirewall.sol";
 import {
-    IFirewallAccess,
     FirewallAccess,
     FIREWALL_ADMIN_ROLE,
     PROTOCOL_ADMIN_ROLE,
     ATTESTER_MANAGER_ROLE,
     TRUSTED_ATTESTER_ROLE
 } from "../src/FirewallAccess.sol";
-import {ISecurityValidator, SecurityValidator, Attestation, BYPASS_FLAG} from "../src/SecurityValidator.sol";
+import {SecurityValidator, BYPASS_FLAG} from "../src/SecurityValidator.sol";
 import {Quantization} from "../src/Quantization.sol";
+import "../src/interfaces/Checkpoint.sol";
+import "../src/interfaces/FirewallDependencies.sol";
+import "../src/interfaces/IProxyFirewall.sol";
 
 interface ILogicContract {
     function withdrawAmount(uint256 n) external;

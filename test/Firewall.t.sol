@@ -3,17 +3,16 @@ pragma solidity ^0.8.25;
 
 import {Test, console, Vm} from "forge-std/Test.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {Firewall, ICheckpointHook, HookResult} from "../src/Firewall.sol";
-import {Checkpoint, Activation} from "../src/Firewall.sol";
+import {Firewall} from "../src/Firewall.sol";
 import {
-    IFirewallAccess,
     FIREWALL_ADMIN_ROLE,
     PROTOCOL_ADMIN_ROLE,
     ATTESTER_MANAGER_ROLE,
     TRUSTED_ATTESTER_ROLE
 } from "../src/FirewallAccess.sol";
-import {ISecurityValidator, Attestation} from "../src/SecurityValidator.sol";
 import {Quantization} from "../src/Quantization.sol";
+import "../src/interfaces/Checkpoint.sol";
+import "../src/interfaces/FirewallDependencies.sol";
 
 contract FirewallImpl is Firewall {
     constructor(
