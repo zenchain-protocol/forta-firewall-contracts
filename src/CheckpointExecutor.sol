@@ -33,6 +33,19 @@ abstract contract CheckpointExecutor {
     }
 
     /**
+     * @notice Executes a checkpoint by calling a known external firewall contract.
+     * @param selector Selector of the function which the checkpoint is configured and executed for
+     * @param input The input value to use in checkpoint hash computation
+     */
+    function _executeCheckpoint(bytes4 selector, bytes32 input) internal virtual {
+        CheckpointExecutorStorage storage $;
+        assembly {
+            $.slot := STORAGE_SLOT
+        }
+        IExternalFirewall($.externalFirewall).executeCheckpoint(msg.sender, selector, input);
+    }
+
+    /**
      * @notice Sets the external firewall in the namespaced storage.
      * @param externalFirewall New external firewall
      */
