@@ -7,99 +7,11 @@ import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IFirewallAccess} from "./FirewallAccess.sol";
 import {FirewallPermissions} from "./FirewallPermissions.sol";
-import {ISecurityValidator, Attestation} from "./SecurityValidator.sol";
 import {Quantization} from "./Quantization.sol";
-
-/**
- * @notice A checkpoint is a configurable point in code that activates in different conditions and
- * does security checks before proceeding with the rest of the execution.
- */
-struct Checkpoint {
-    /// @notice The value to compare against an incoming function argument.
-    uint192 threshold;
-    /**
-     * @notice Defines the expected start position of the incoming argument in the call data.
-     * This is needed in some integration cases when the reference is found directly from call data
-     * bytes.
-     */
-    uint16 refStart;
-    /**
-     * @notice Defines the expected end position of the incoming argument in the call data.
-     * This is needed in some integration cases when the reference is found directly from call data
-     * bytes.
-     */
-    uint16 refEnd;
-    /**
-     * @notice Defines the type of checkpoint activation (see types below).
-     */
-    Activation activation;
-    /**
-     * @notice This is for relying on tx.origin instead of hash-based checkpoint execution.
-     */
-    bool trustedOrigin;
-}
-
-/// @notice Checkpoint activation modes.
-enum Activation {
-    /// @notice The default activation value for an unset checkpoint, which should mean "no security checks".
-    Inactive,
-    /// @notice The checkpoint is blocked by default.
-    AlwaysBlocked,
-    /// @notice Every call to the integrated function should require security checks.
-    AlwaysActive,
-    /// @notice Security checks are only required if a specific function argument exceeds the threshold.
-    ConstantThreshold,
-    /// @notice For adding up all intercepted values by the same checkpoint before comparing with the threshold.
-    AccumulatedThreshold
-}
-
-interface IFirewall {
-    function updateFirewallConfig(
-        ISecurityValidator _validator,
-        ICheckpointHook _checkpointHook,
-        bytes32 _attesterControllerId,
-        IFirewallAccess _firewallAccess
-    ) external;
-
-    function getFirewallConfig()
-        external
-        view
-        returns (
-            ISecurityValidator _validator,
-            ICheckpointHook _checkpointHook,
-            bytes32 _attesterControllerId,
-            IFirewallAccess _firewallAccess
-        );
-
-    function setCheckpoint(bytes4 selector, Checkpoint memory checkpoint) external;
-
-    function setCheckpointActivation(bytes4 selector, Activation activation) external;
-
-    function getCheckpoint(bytes4 selector) external view returns (uint192, uint16, uint16, Activation, bool);
-
-    function attestedCall(Attestation calldata attestation, bytes calldata attestationSignature, bytes calldata data)
-        external
-        returns (bytes memory);
-}
-
-interface IAttesterInfo {
-    event AttesterControllerUpdated(bytes32 indexed attesterControllerId);
-
-    function getAttesterControllerId() external view returns (bytes32);
-}
-
-enum HookResult {
-    Inconclusive,
-    ForceActivation,
-    ForceDeactivation
-}
-
-/// @notice An interface to support custom configurations per executed checkpoint.
-interface ICheckpointHook {
-    function handleCheckpoint(address caller, bytes4 selector, uint256 ref) external view returns (HookResult);
-}
+import "./interfaces/IFirewall.sol";
+import "./interfaces/FirewallDependencies.sol";
+import "./interfaces/IAttesterInfo.sol";
 
 /**
  * @notice Firewall is a base contract which provides protection against exploits.
@@ -118,9 +30,6 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions {
     error InvalidActivationType();
     error UntrustedAttester(address attester);
     error CheckpointBlocked();
-
-    event SecurityConfigUpdated(ISecurityValidator indexed validator, IFirewallAccess indexed firewallAccess);
-    event SupportsTrustedOrigin(address indexed firewall);
 
     struct FirewallStorage {
         ISecurityValidator validator;

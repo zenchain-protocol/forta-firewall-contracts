@@ -3,7 +3,7 @@
 
 pragma solidity ^0.8.25;
 
-import {IFirewallAccess} from "./FirewallAccess.sol";
+import "./interfaces/IFirewallAccess.sol";
 
 /**
  * @notice Simplifies interactions with a firewall access contract.

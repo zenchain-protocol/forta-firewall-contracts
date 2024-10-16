@@ -7,20 +7,9 @@ import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IFirewall, ICheckpointHook, Firewall} from "./Firewall.sol";
-import {ISecurityValidator} from "./SecurityValidator.sol";
-import {IFirewallAccess} from "./FirewallAccess.sol";
-
-interface IProxyFirewall is IFirewall {
-    function initializeFirewallConfig(
-        ISecurityValidator _validator,
-        ICheckpointHook _checkpointHook,
-        bytes32 _attesterControllerId,
-        IFirewallAccess _firewallAccess
-    ) external;
-
-    function upgradeNextAndCall(address newImplementation, bytes memory data) external payable;
-}
+import {Firewall} from "./Firewall.sol";
+import "./interfaces/IProxyFirewall.sol";
+import "./interfaces/FirewallDependencies.sol";
 
 /**
  * @notice This contract provides firewall functionality as an intermediary contract

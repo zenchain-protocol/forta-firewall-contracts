@@ -3,13 +3,10 @@
 
 pragma solidity ^0.8.25;
 
-import {Firewall, ICheckpointHook} from "./Firewall.sol";
-import {ISecurityValidator} from "./SecurityValidator.sol";
-import {IFirewallAccess} from "./FirewallAccess.sol";
-
-interface IExternalFirewall {
-    function executeCheckpoint(address caller, bytes4 selector, uint256 ref) external;
-}
+import {Firewall} from "./Firewall.sol";
+import "./interfaces/ISecurityValidator.sol";
+import "./interfaces/ICheckpointHook.sol";
+import "./interfaces/IFirewallAccess.sol";
 
 /**
  * @notice This contract provides firewall functionality externally. The integrator contract

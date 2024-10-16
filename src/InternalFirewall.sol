@@ -3,9 +3,8 @@
 
 pragma solidity ^0.8.25;
 
-import {Firewall, ICheckpointHook} from "./Firewall.sol";
-import {ISecurityValidator} from "./SecurityValidator.sol";
-import {IFirewallAccess} from "./FirewallAccess.sol";
+import {Firewall} from "./Firewall.sol";
+import "./interfaces/FirewallDependencies.sol";
 
 /**
  * @notice This contract provides firewall functionality through inheritance. The child

@@ -7,20 +7,10 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
+import "./interfaces/ISecurityValidator.sol";
+import "./interfaces/Attestation.sol";
 
 address constant BYPASS_FLAG = 0x0000000000000000000000000000000000f01274; // "forta" in leetspeak
-
-/// @notice Set of values that enable execution of call(s)
-struct Attestation {
-    /// @notice Deadline UNIX timestamp
-    uint256 deadline;
-    /**
-     * @notice Ordered hashes which should be produced at every checkpoint execution
-     * in this contract. An attester uses these hashes to enable a specific execution
-     * path.
-     */
-    bytes32[] executionHashes;
-}
 
 /// @notice Attestation data wrapped for storing.
 struct StoredAttestation {
@@ -28,21 +18,6 @@ struct StoredAttestation {
     Attestation attestation;
     /// @notice The attester which signed above attestation.
     address attester;
-}
-
-interface ISecurityValidator {
-    function hashAttestation(Attestation calldata attestation) external view returns (bytes32);
-    function getCurrentAttester() external view returns (address);
-    function validateFinalState() external view;
-    function executionHashFrom(bytes32 checkpointHash, address caller, bytes32 executionHash)
-        external
-        pure
-        returns (bytes32);
-
-    function storeAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
-    function saveAttestation(Attestation calldata attestation, bytes calldata attestationSignature) external;
-
-    function executeCheckpoint(bytes32 checkpointHash) external returns (bytes32);
 }
 
 /**
