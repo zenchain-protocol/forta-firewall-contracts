@@ -3,7 +3,6 @@ src = "src"
 out = "out"
 libs = ["lib"]
 evm_version = "cancun"
-gas_reports_ignore = ["SecurityProxy", "LogicContract"]
 
 [rpc_endpoints]
 deploy = "${DEPLOY_RPC}"

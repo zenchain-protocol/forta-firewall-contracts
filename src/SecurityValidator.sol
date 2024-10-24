@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: UNLICENSED
-// See Forta Network License: https://github.com/forta-network/forta-firewall-contracts/blob/master/LICENSE.md
+// SPDX-License-Identifier: Forta Network License
+// See license at: https://github.com/forta-network/forta-firewall-contracts/blob/master/LICENSE-FN.md
 
 pragma solidity ^0.8.25;
 

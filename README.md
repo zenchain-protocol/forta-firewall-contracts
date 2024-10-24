@@ -1,5 +1,7 @@
 ## Forta Firewall Contracts
 
+This repository contains the firewall contract library useful for integrating with Forta Attestations.
+
 ## Deployment
 
 Create an `.env` file like
