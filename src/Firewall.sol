@@ -107,6 +107,11 @@ abstract contract Firewall is IFirewall, IAttesterInfo, FirewallPermissions {
         return ($.validator, $.checkpointHook, $.attesterControllerId, firewallAccess);
     }
 
+    function updateTrustedAttesters(ITrustedAttesters _trustedAttesters) public virtual onlyFirewallAdmin {
+        _updateTrustedAttesters(_trustedAttesters);
+        emit TrustedAttestersUpdated(_trustedAttesters);
+    }
+
     /**
      * @notice Returns the attester controller id from the configuration.
      */
