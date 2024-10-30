@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GNU General Public License Version 3
+// See license at: https://github.com/forta-network/forta-firewall-contracts/blob/master/LICENSE-GPLv3.md
 pragma solidity ^0.8.25;
 
 import "evc/interfaces/IVault.sol";
