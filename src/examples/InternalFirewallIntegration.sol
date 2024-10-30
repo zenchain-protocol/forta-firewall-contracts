@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.25;
 
-import {CheckpointExecutor} from "../CheckpointExecutor.sol";
-import {ExternalFirewall} from "../ExternalFirewall.sol";
+import {InternalFirewall} from "../InternalFirewall.sol";
 import {ISecurityValidator} from "../interfaces/ISecurityValidator.sol";
 import {FirewallAccess} from "../FirewallAccess.sol";
-import {IExternalFirewall} from "../interfaces/IExternalFirewall.sol";
+import {IFirewallAccess} from "../interfaces/IFirewallAccess.sol";
 import {ICheckpointHook} from "../interfaces/ICheckpointHook.sol";
 import {
     FIREWALL_ADMIN_ROLE,
@@ -17,15 +16,13 @@ import {
 import {Checkpoint} from "../interfaces/Checkpoint.sol";
 import {Activation} from "../interfaces/Activation.sol";
 
-contract ProtectedContract is CheckpointExecutor {
-    constructor(IExternalFirewall externalFirewall) {
-        _setExternalFirewall(externalFirewall);
-    }
-
-    modifier safeExecution() {
-        _executeCheckpoint(msg.sig, keccak256(msg.data));
-        _;
-    }
+contract ProtectedContract is InternalFirewall {
+    constructor(
+        ISecurityValidator _validator,
+        ICheckpointHook _checkpointHook,
+        bytes32 _attesterControllerId,
+        IFirewallAccess _firewallAccess
+    ) InternalFirewall(_validator, _checkpointHook, _attesterControllerId, _firewallAccess) {}
 
     function foo(uint256 num) public safeExecution {}
 }
@@ -33,7 +30,6 @@ contract ProtectedContract is CheckpointExecutor {
 /// @notice This deployer is not intended for production use and only demonstrates the steps
 /// for firewall integration.
 contract Deployer {
-    event DeployedFirewall(ExternalFirewall firewall);
     event DeployedProtectedContract(ProtectedContract protectedContract);
 
     function deploy(
@@ -45,20 +41,14 @@ contract Deployer {
         /// will renounce default role later below
         FirewallAccess firewallAccess = new FirewallAccess(address(this));
 
-        ExternalFirewall externalFirewall =
-            new ExternalFirewall(validator, ICheckpointHook(address(0)), attesterControllerId, firewallAccess);
-        emit DeployedFirewall(externalFirewall);
-
-        ProtectedContract protectedContract = new ProtectedContract(externalFirewall);
+        ProtectedContract protectedContract =
+            new ProtectedContract(validator, ICheckpointHook(address(0)), attesterControllerId, firewallAccess);
         emit DeployedProtectedContract(protectedContract);
 
         /// will renounce later below
         firewallAccess.grantRole(FIREWALL_ADMIN_ROLE, address(this));
         firewallAccess.grantRole(PROTOCOL_ADMIN_ROLE, address(this));
         firewallAccess.grantRole(ATTESTER_MANAGER_ROLE, address(this));
-
-        /// let protected contract execute checkpoints on the external firewall
-        firewallAccess.grantRole(CHECKPOINT_EXECUTOR_ROLE, address(protectedContract));
 
         /// set the trusted attester:
         /// this will be necessary when "foo()" receives an attested call later.
@@ -72,7 +62,7 @@ contract Deployer {
             activation: Activation.AlwaysActive,
             trustedOrigin: false
         });
-        externalFirewall.setCheckpoint(ProtectedContract.foo.selector, checkpoint);
+        protectedContract.setCheckpoint(ProtectedContract.foo.selector, checkpoint);
 
         /// granting the default role
         firewallAccess.grantRole(0x00, firewallAdmin);
