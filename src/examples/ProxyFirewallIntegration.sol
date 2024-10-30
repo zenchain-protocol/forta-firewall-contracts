@@ -1,4 +1,5 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GNU General Public License Version 3
+// See license at: https://github.com/forta-network/forta-firewall-contracts/blob/master/LICENSE-GPLv3.md
 pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -20,6 +21,8 @@ contract ProtectedContract {
     function foo(uint256 num) public {}
 }
 
+/// @notice This deployer is not intended for production use and only demonstrates the steps
+/// for firewall integration.
 contract Deployer {
     event DeployedFirewall(ProxyFirewall firewall);
     event DeployedProtectedContract(ProtectedContract protectedContract);
