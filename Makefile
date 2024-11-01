@@ -1,6 +1,13 @@
 .PHONY: dry-run-deploy
 dry-run-deploy:
 	forge script \
+		./script/Deployer.s.sol \
+		--chain-id 8408 \
+		--fork-url zenchain_testnet
+
+.PHONY: dry-run-firewall-deploy
+dry-run-firewall-deploy:
+	forge script \
 		./script/FirewallDeployer.s.sol:FirewallDeployerScript \
 		--sig "run()" \
 		--chain-id 8408 \

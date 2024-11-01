@@ -7,7 +7,7 @@ This repository contains the firewall contract library useful for integrating wi
 Create an `.env` file like [.env.example](.env.example), then do
 
 ```sh
-make dry-run-deploy
+make dry-run-deploy && make dry-run-firewall-deploy
 ```
 
 for a dry run or
