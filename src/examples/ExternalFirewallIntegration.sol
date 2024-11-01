@@ -6,6 +6,7 @@ import {CheckpointExecutor} from "../CheckpointExecutor.sol";
 import {ExternalFirewall} from "../ExternalFirewall.sol";
 import {ISecurityValidator} from "../interfaces/ISecurityValidator.sol";
 import {FirewallAccess} from "../FirewallAccess.sol";
+import {FirewallRouter} from "../FirewallRouter.sol";
 import {IExternalFirewall} from "../interfaces/IExternalFirewall.sol";
 import {ICheckpointHook} from "../interfaces/ICheckpointHook.sol";
 import {
@@ -35,6 +36,7 @@ contract ProtectedContract is CheckpointExecutor {
 /// for firewall integration.
 contract Deployer {
     event DeployedFirewall(ExternalFirewall firewall);
+    event DeployedFirewallRouter(FirewallRouter firewallRouter);
     event DeployedProtectedContract(ProtectedContract protectedContract);
 
     function deploy(
@@ -50,7 +52,11 @@ contract Deployer {
             new ExternalFirewall(validator, ICheckpointHook(address(0)), attesterControllerId, firewallAccess);
         emit DeployedFirewall(externalFirewall);
 
-        ProtectedContract protectedContract = new ProtectedContract(externalFirewall);
+        /// deploy a router for firewall upgradeability
+        FirewallRouter firewallRouter = new FirewallRouter(externalFirewall, firewallAccess);
+        emit DeployedFirewallRouter(firewallRouter);
+
+        ProtectedContract protectedContract = new ProtectedContract(firewallRouter);
         emit DeployedProtectedContract(protectedContract);
 
         /// will renounce later below
@@ -60,6 +66,7 @@ contract Deployer {
 
         /// let protected contract execute checkpoints on the external firewall
         firewallAccess.grantRole(CHECKPOINT_EXECUTOR_ROLE, address(protectedContract));
+        firewallAccess.grantRole(CHECKPOINT_EXECUTOR_ROLE, address(firewallRouter));
 
         /// set the trusted attester:
         /// this will be necessary when "foo()" receives an attested call later.
