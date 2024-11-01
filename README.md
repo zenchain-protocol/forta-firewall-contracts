@@ -4,14 +4,13 @@ This repository contains the firewall contract library useful for integrating wi
 
 ## Deployment
 
-Create an `.env` file like
+Create an `.env` file like [.env.example](.env.example), then do
 
-```
-DEPLOY_RPC=https://polygon-mainnet.g.alchemy.com/v2/...
-DEPLOY_KEY=1a735a19b4a253527031d0c47a3478e13eda92e717f3a5866a56b3864dc29e7b
+```sh
+make dry-run-deploy
 ```
 
-then do
+for a dry run or
 
 ```sh
 make deploy

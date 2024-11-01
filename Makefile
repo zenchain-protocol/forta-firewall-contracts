@@ -1,13 +1,25 @@
+.PHONY: dry-run-deploy
+dry-run-deploy:
+	forge script \
+		./script/FirewallDeployer.s.sol:FirewallDeployerScript \
+		--sig "run()" \
+		--chain-id 8408 \
+		--fork-url zenchain_testnet
+
 .PHONY: deploy
 deploy:
-	forge script --rpc-url deploy --broadcast ./script/Deployer.s.sol
+	forge script \
+		--rpc-url zenchain_testnet \
+		--chain-id 8408 \
+		--broadcast \
+		./script/Deployer.s.sol
 
 .PHONY: deploy-firewall
 deploy-firewall:
 	forge script \
 		./script/FirewallDeployer.s.sol:FirewallDeployerScript \
-		--chain 1 \
-		--rpc-url deploy \
+		--rpc-url zenchain_testnet \
+		--chain-id 8408 \
 		--broadcast \
 		--slow \
 		--verify
